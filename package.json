@@ -1,0 +1,34 @@
+{
+  "name": "bombay-server",
+  "version": "0.1.0",
+  "private": true,
+  "contributer": {
+    "name": "Michael C Riehle",
+    "email": "aikimcr@gmail.com"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "test": "mocha --require test/lib/hooks.js --reporter tap --timeout 10000"
+  },
+  "dependencies": {
+    "bookshelf": "^1.2.0",
+    "cookie-parser": "^1.4.4",
+    "debug": "^2.6.9",
+    "express": "^4.18.1",
+    "http-errors": "^1.6.3",
+    "morgan": "^1.9.1",
+    "sequelize": "^6.21.3",
+    "sqlite3": "^5.0.10"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^6.0.0",
+    "grunt": "^1.5.3",
+    "should": "^13.2.3",
+    "sinon": "^14.0.0",
+    "supertest": "^6.2.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aikimcr/bombay_server.git"
+  }
+}
