@@ -1,10 +1,9 @@
-const util = require('util');
 const createError = require('http-errors');
 const express = require('express');
 const router = express.Router();
 const db = require('../lib/db')();
 
-const Artist = db.artist;
+const Artist = db.model('artist');
 
 /* Validate parameters */
 router.use((req, res, next) => {

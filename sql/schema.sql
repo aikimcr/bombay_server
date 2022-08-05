@@ -21,7 +21,7 @@ DROP TRIGGER IF EXISTS del_band_member;
 DROP TABLE IF EXISTS band_member;
 
 DROP TABLE IF EXISTS artist;
-DROP TABLE IF EXISTS person;
+DROP TABLE IF EXISTS user;
 DROP TABLE IF EXISTS band;
 
 DROP TABLE IF EXISTS schema_change;
@@ -38,7 +38,7 @@ CREATE TABLE band (
   UNIQUE (name)
 );
 
-CREATE TABLE person (
+CREATE TABLE user (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name VARCHAR NOT NULL,
   full_name VARCHAR,
@@ -52,11 +52,11 @@ CREATE TABLE person (
 CREATE TABLE band_member (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   band_id INTEGER NOT NULL,
-  person_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
   band_admin INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (band_id) REFERENCES band(id),
-  FOREIGN KEY (person_id) REFERENCES person(id),
-  UNIQUE (band_id, person_id)
+  FOREIGN KEY (user_id) REFERENCES user(id),
+  UNIQUE (band_id, user_id)
 );
 
 CREATE TABLE artist (
@@ -70,6 +70,8 @@ CREATE TABLE song (
   name VARCHAR NOT NULL,
   artist_id INTEGER NOT NULL,
   key_signature VARCHAR DEFAULT '',
+  tempo INTEGER,
+  lyrics VARCHAR DEFAULT '',
   FOREIGN KEY (artist_id) REFERENCES artist(id),
   UNIQUE (name, artist_id)
 );
@@ -174,9 +176,9 @@ CREATE TABLE session (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_token VARCHAR,
   session_start VARCHAR NOT NULL,
-  person_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
   UNIQUE (session_token),
-  FOREIGN KEY (person_id) REFERENCES person(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
 );
 
 CREATE TABLE snapshot (
@@ -211,7 +213,7 @@ CREATE TABLE request (
   request_type INTEGER NOT NULL,
   status INTEGER,
   band_id INTEGER,
-  person_id INTEGER
+  user_id INTEGER
 );
 
 CREATE TABLE setlist (
@@ -250,7 +252,7 @@ CREATE TABLE schema_change (
   UNIQUE (name)
 );
 
-INSERT INTO person (name, full_name, password, system_admin)
+INSERT INTO user (name, full_name, password, system_admin)
   VALUES ('admin', 'Administrator', 'admin', 1);
 
 /*

@@ -4,6 +4,8 @@ const should = require('should');
 const faker = require('@faker-js/faker').faker;
 
 const db = require('../lib/db')();
+const permissions = require('../lib/permissions');
+const Artist = db.model('artist');
 
 let artistCollection;
 
@@ -40,12 +42,18 @@ function parseQueryArgs(args) {
 }
 
 beforeEach(function() {
-  sinon.stub(db.artist, 'forge').callsFake(function() {
+  sinon.stub(permissions, 'authorize').callsFake(function(req, res, next) {
+    return (req, res, next) => {
+      next();
+    }
+  });
+
+  sinon.stub(Artist, 'forge').callsFake(function() {
     const model = new this();
 
     sinon.stub(model, 'fetch').callsFake(function() {
       return new Promise((resolve, reject) => {
-        const query = parseQueryArgs(db.artist.query.args);
+        const query = parseQueryArgs(Artist.query.args);
         const modelResult = artistCollection.at(query.artistQueryIndex);
 
         if (modelResult) {
@@ -82,7 +90,7 @@ beforeEach(function() {
 
     sinon.stub(model, 'destroy').callsFake(function(options) {
       return new Promise((resolve, reject) => {
-        const query = parseQueryArgs(db.artist.query.args);
+        const query = parseQueryArgs(Artist.query.args);
         const modelResult = artistCollection.at(query.artistQueryIndex);
 
         if (modelResult) {
@@ -97,14 +105,14 @@ beforeEach(function() {
     return model;
   });
 
-  sinon.stub(db.artist, 'collection').callsFake(function() {
-    const collection = new db.bookshelf.Collection();
+  sinon.stub(Artist, 'collection').callsFake(function() {
+    const collection = new db.Collection();
 
     const modelsPromise = new Promise((resolve, reject) => {
       const models = [];
 
       for(let i=0; i<50; i++) {
-        const model = db.artist.forge();
+        const model = Artist.forge();
         model.set({
           id: i+1,
           name: `${faker.name.firstName()} ${faker.name.lastName()}`,
@@ -112,7 +120,7 @@ beforeEach(function() {
         models.push(model);
       }
 
-      const tmpCollection = new db.bookshelf.Collection(models);
+      const tmpCollection = new db.Collection(models);
       collection.reset(tmpCollection.slice(0, 25));
       resolve(collection);
     });
@@ -122,7 +130,7 @@ beforeEach(function() {
       const query = parseQueryArgs(this.query.args);
       const collectionModels = this.sortBy(query.orderBy).slice(query.offset, query.offset + query.limit);
 
-      const collection = new db.bookshelf.Collection(collectionModels);
+      const collection = new db.Collection(collectionModels);
 
       if (collection.length < collectionModels.length) {
         throw new Error(`Collection length does not match models: ${collection.length}(C) !== ${collectionModels.length}(M).`);
@@ -137,7 +145,7 @@ beforeEach(function() {
     return collection;
   })
 
-  sinon.stub(db.artist, 'query').returns(db.artist.forge());
+  sinon.stub(Artist, 'query').returns(Artist.forge());
 });
 
 describe('get', function() {
@@ -246,7 +254,7 @@ describe('get', function() {
   describe('model', function() {
     it('should return the specified row by name', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const testModel = collection.at(2);
 
       request(app)
@@ -256,7 +264,7 @@ describe('get', function() {
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([
+          Artist.query.args.should.deepEqual([
             ['where', 'name', '=', testModel.get('name')],
           ]);
           res.body.should.deepEqual(testModel.toJSON());
@@ -266,7 +274,7 @@ describe('get', function() {
 
     it('should return 404 if name does not exist', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const findName = `${faker.name.firstName()} ${faker.name.lastName()} ${faker.random.word()}`;
 
       request(app)
@@ -276,7 +284,7 @@ describe('get', function() {
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([
+          Artist.query.args.should.deepEqual([
             ['where', 'name', '=', findName],
           ]);
           res.body.should.deepEqual({});
@@ -291,7 +299,7 @@ describe('post', function() {
   describe('model', function() {
     it('should add a new record with a new id', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const newId = collection.length + 1;
       const newName = `${faker.name.firstName()} ${faker.name.lastName()}`;
 
@@ -303,7 +311,7 @@ describe('post', function() {
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([]);
+          Artist.query.args.should.deepEqual([]);
           res.body.should.deepEqual({
             id: newId,
             name: newName,
@@ -314,7 +322,7 @@ describe('post', function() {
 
     it('should override the specified id', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const newId = collection.length + 1;
       const newName = `${faker.name.firstName()} ${faker.name.lastName()}`;
 
@@ -326,7 +334,7 @@ describe('post', function() {
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([]);
+          Artist.query.args.should.deepEqual([]);
           res.body.should.deepEqual({
             id: newId,
             name: newName,
@@ -337,7 +345,7 @@ describe('post', function() {
 
     it('should reject on missing name', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
 
       request(app)
         .post(`/artist`)
@@ -347,7 +355,7 @@ describe('post', function() {
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([]);
+          Artist.query.args.should.deepEqual([]);
           res.body.should.deepEqual({});
           res.text.should.equal('Name must be specified');
           done();
@@ -356,7 +364,7 @@ describe('post', function() {
 
     it('should reject on duplicate name', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const newName = collection.at(5).get('name');
 
       request(app)
@@ -367,7 +375,7 @@ describe('post', function() {
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([]);
+          Artist.query.args.should.deepEqual([]);
           res.body.should.deepEqual({});
           res.text.should.equal(`artist: duplicate name '${newName}'`);
           done();
@@ -376,7 +384,7 @@ describe('post', function() {
 
     it('should reject on extraneous fields', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const newName = `${faker.name.firstName()} ${faker.name.lastName()}`;
 
       request(app)
@@ -387,7 +395,7 @@ describe('post', function() {
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([]);
+          Artist.query.args.should.deepEqual([]);
           res.body.should.deepEqual({});
           res.text.should.equal(`Unexpected data found: '{"gender":"male","age":"156"}'`);
           done();
@@ -400,7 +408,7 @@ describe('put', function() {
   describe('model', function() {
     it('should update the artist name', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const testModel = collection.at(2);
       const newName = `${faker.name.firstName()} ${faker.name.lastName()}`;
 
@@ -412,7 +420,7 @@ describe('put', function() {
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([
+          Artist.query.args.should.deepEqual([
             ['where', 'id', '=', testModel.get('id').toString()],
           ]);
           res.body.should.deepEqual({id: testModel.get('id'), name: newName});
@@ -422,7 +430,7 @@ describe('put', function() {
 
     it('should reject on a duplicate name', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const testModel = collection.at(2);
       const newName = collection.at(4).get('name');
 
@@ -434,7 +442,7 @@ describe('put', function() {
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([
+          Artist.query.args.should.deepEqual([
             ['where', 'id', '=', testModel.get('id').toString()],
           ]);
           res.body.should.deepEqual({});
@@ -445,7 +453,7 @@ describe('put', function() {
 
     it('should return 404 on non-existent id', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const findId = collection.length + 1;
       const newName = collection.at(4).get('name');
 
@@ -457,7 +465,7 @@ describe('put', function() {
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([
+          Artist.query.args.should.deepEqual([
             ['where', 'id', '=', findId.toString()],
           ]);
           res.body.should.deepEqual({});
@@ -472,7 +480,7 @@ describe('delete', function() {
   describe('model', function() {
     it('should delete the model from the datatbase', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const testModel = collection.at(2);
 
       request(app)
@@ -482,7 +490,7 @@ describe('delete', function() {
         .expect('Content-Type', /text\/plain/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([
+          Artist.query.args.should.deepEqual([
             ['where', 'id', '=', testModel.get('id').toString()],
           ]);
           res.body.should.deepEqual({});
@@ -493,7 +501,7 @@ describe('delete', function() {
 
     it('should return 404 on non-existent id', function(done) {
       const app = require('../app.js');
-      const collection = db.artist.collection();
+      const collection = Artist.collection();
       const findId = collection.length + 1;
 
       request(app)
@@ -503,7 +511,7 @@ describe('delete', function() {
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
-          db.artist.query.args.should.deepEqual([
+          Artist.query.args.should.deepEqual([
             ['where', 'id', '=', findId.toString()],
           ]);
           res.body.should.deepEqual({});
