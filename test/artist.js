@@ -3,247 +3,178 @@ const sinon = require('sinon');
 const should = require('should');
 const faker = require('@faker-js/faker').faker;
 
-const db = require('../lib/db')();
-const permissions = require('../lib/permissions');
-const Artist = db.model('artist');
+// TODO: This connection boilerplate doesn't really belong here.
+const db = require('../lib/db')({
+  connection: ':memory:',
+  pool: {
+    min: 1,
+    max: 1,
+    disposeTimeout: 360000 * 1000,
+    idleTimeoutMillis: 360000 * 1000,
+  },
+});
+const testDb = require('./lib/db');
 
-let artistCollection;
+const tableName = 'artist';
+const Artist = db.model(tableName);
 
-function parseQueryArgs(args) {
-  const result = {
-    offset: 0,
-    limit: 10,
-    orderBy: 'name',
-    artistQueryIndex: -1,
-  };
-
-  args.forEach(queryArgs => {
-    switch(queryArgs[0]) {
-      case 'limit': result.limit = Number(queryArgs[1]); break;
-      case 'offset': result.offset = Number(queryArgs[1]); break;
-      case 'orderBy': result.orderBy = queryArgs[1]; break;
-      case 'where':
-        switch(queryArgs[1]) {
-          case 'name': result.artistQueryIndex = artistCollection.models.findIndex(model => {
-            return model.get('name') === queryArgs[3];
-          });
-          break;
-
-          case 'id': result.artistQueryIndex = artistCollection.models.findIndex(model => {
-            return model.get('id') === Number(queryArgs[3]);
-          });
-          break;
-        };
-        break;
-    }
-  });
-
-  return result;
-}
-
-beforeEach(function() {
-  sinon.stub(permissions, 'authorize').callsFake(function(req, res, next) {
-    return (req, res, next) => {
-      next();
-    }
-  });
-
-  sinon.stub(Artist, 'forge').callsFake(function() {
-    const model = new this();
-
-    sinon.stub(model, 'fetch').callsFake(function() {
-      return new Promise((resolve, reject) => {
-        const query = parseQueryArgs(Artist.query.args);
-        const modelResult = artistCollection.at(query.artistQueryIndex);
-
-        if (modelResult) {
-          resolve(modelResult);
-        } else {
-          reject(new Error("No rows found"));
-        }
-      })
-    });
-
-    sinon.stub(model, 'save').callsFake(function(attributes, options) {
-      return new Promise((resolve, reject) => {
-        const duplicate = artistCollection.find(model => {
-          return model.get('name') === attributes.name;
-        });
-
-        if (duplicate) {
-          reject({
-            code: 'SQLITE_CONSTRAINT',
-            message: `SQLITE_CONSTRAINT: duplicate: artist.name`,
-          });
-        } else {
-          if (options.patch) {
-            delete attributes.id;
-          } else {
-            attributes.id = artistCollection.length + 1;
-          }
-
-          model.set(attributes);
-          resolve(model);
-        }
-      });
-    });
-
-    sinon.stub(model, 'destroy').callsFake(function(options) {
-      return new Promise((resolve, reject) => {
-        const query = parseQueryArgs(Artist.query.args);
-        const modelResult = artistCollection.at(query.artistQueryIndex);
-
-        if (modelResult) {
-          artistCollection.remove(modelResult);
-          resolve({});
-        } else {
-          reject(new Error("No rows found"));
-        }
-      })
-    })
-
-    return model;
-  });
-
-  sinon.stub(Artist, 'collection').callsFake(function() {
-    const collection = new db.Collection();
-
-    const modelsPromise = new Promise((resolve, reject) => {
-      const models = [];
-
-      for(let i=0; i<50; i++) {
-        const model = Artist.forge();
-        model.set({
-          id: i+1,
-          name: `${faker.name.firstName()} ${faker.name.lastName()}`,
-        });
-        models.push(model);
-      }
-
-      const tmpCollection = new db.Collection(models);
-      collection.reset(tmpCollection.slice(0, 25));
-      resolve(collection);
-    });
-
-    sinon.stub(collection, 'fetch').callsFake(async function() {
-      await modelsPromise;
-      const query = parseQueryArgs(this.query.args);
-      const collectionModels = this.sortBy(query.orderBy).slice(query.offset, query.offset + query.limit);
-
-      const collection = new db.Collection(collectionModels);
-
-      if (collection.length < collectionModels.length) {
-        throw new Error(`Collection length does not match models: ${collection.length}(C) !== ${collectionModels.length}(M).`);
-      }
-
-      return collection;
-    });
-
-    sinon.stub(collection, 'query').returns(collection);
-
-    artistCollection = collection;
-    return collection;
+after(function() {
+  db.knex.destroy((err) => {
+    console.log(err);
   })
+});
 
-  sinon.stub(Artist, 'query').returns(Artist.forge());
+const testData = {};
+
+beforeEach(function(done) {
+  testDb.buildSchema()
+    .then(() => {
+      return testDb.loadTable(tableName, 25, (args) => {
+        const fakeName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
+        return {name: fakeName, ...args};
+      });
+    })
+    .then((artists) => {
+      testDb.stubPermissions();
+      testDb.stubArtist();
+    })
+    .then(() => {
+      testData.newName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
+      testData.findName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
+      return testDb.getTestModel(tableName, 2);
+    })
+    .then((testModel) => {
+      testData.model = testModel;
+      return testDb.getNextId(tableName);
+    })
+    .then((newId) => {
+      testData.newId = newId;
+      testData.findId = newId + 100;
+      return testDb.getTestModel(tableName, 4);
+    })
+    .then((dupModel) => {
+      const app = require('../app.js');
+      testData.duplicate = dupModel;
+      testData.request = request(app)
+      done()
+    })
+    .catch((err) => {
+      done(err);
+    });
 });
 
 describe('get', function() {
   describe('collection', function() {
-    function bodyExpect() {
-      const query = parseQueryArgs(artistCollection.query.args);
+    function bodyExpect(queryExpect) {
+      const query = testDb.parseQueryArgs(queryExpect);
       const newOffset = query.offset + query.limit;
+      const queryBuilder = db.knex(tableName);
+      queryExpect.forEach((arg) => {
+        if (arg.length > 0) {
+          queryBuilder[arg[0]](arg.slice(1));
+        }
+      });
 
-      const newData = artistCollection
-        .sortBy(query.orderBy)
-        .slice(query.offset, newOffset)
-        .map(model => {
-          return model.toJSON();
+      return queryBuilder.select()
+        .then((result) => {
+          let body = {data: result};
+
+          if (body.data.length >= query.limit) {
+            body.nextPage = `http://127.0.0.1:3000/artist/?offset=${newOffset}&limit=${query.limit}`;
+          }
+
+          return Promise.resolve(body);
         });
-
-      let body = {data: newData};
-
-      if (body.data.length >= query.limit) {
-        body.nextPage = `http://127.0.0.1:3000/artist/?offset=${newOffset}&limit=${query.limit}`;
-      }
-
-      return body;
     };
 
     it('should return all the rows in page one', function(done) {
-      const app = require('../app.js');
-      request(app)
+      const queryExpect = [
+        ['orderBy', 'name'],
+        ['offset', '0'],
+        ['limit', '10'],
+        [],
+      ];
+
+      testData.request
         .get('/artist')
         .set('Accept', 'application/json')
         .expect(200)
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
-          artistCollection.query.args.should.deepEqual([
-            ['orderBy', 'name'],
-            ['offset', '0'],
-            ['limit', '10'],
-          ]);
-          res.body.should.deepEqual(bodyExpect());
-          done();
+          testDb.artistCollection.query.args.should.deepEqual(queryExpect);
+          bodyExpect(queryExpect)
+            .then(function(expectation) {
+              res.body.should.deepEqual(expectation);
+              done();
+            });
         });
     });
 
     it('should return the next page of rows', function(done) {
-      const app = require('../app.js');
+      const queryExpect = [
+        ['orderBy', 'name'],
+        ['offset', '10'],
+        ['limit', '10'],
+        [],
+      ];
 
-      request(app)
+      testData.request
         .get('/artist?offset=10&limit=10')
         .set('Accept', 'application/json')
         .expect(200)
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
-          artistCollection.query.args.should.deepEqual([
-            ['orderBy', 'name'],
-            ['offset', '10'],
-            ['limit', '10'],
-          ])
-          res.body.should.deepEqual(bodyExpect());
-          done();
+          testDb.artistCollection.query.args.should.deepEqual(queryExpect);
+          bodyExpect(queryExpect)
+            .then(function(expectation) {
+              res.body.should.deepEqual(expectation);
+              done();
+            });
         });
     });
 
     it('should return partial page', function(done) {
-      const app = require('../app.js');
+      const queryExpect = [
+        ['orderBy', 'name'],
+        ['offset', '20'],
+        ['limit', '10'],
+        [],
+      ];
 
-      request(app)
+      testData.request
         .get('/artist?offset=20&limit=10')
         .set('Accept', 'application/json')
         .expect(200)
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
-          artistCollection.query.args.should.deepEqual([
-            ['orderBy', 'name'],
-            ['offset', '20'],
-            ['limit', '10'],
-          ])
-          res.body.should.deepEqual(bodyExpect());
-          done();
+          testDb.artistCollection.query.args.should.deepEqual(queryExpect);
+          bodyExpect(queryExpect)
+            .then(function(expectation) {
+              res.body.should.deepEqual(expectation);
+              done();
+            });
         });
     });
 
     it('should return a 404', function(done) {
-      const app = require('../app.js');
+      const queryExpect = [
+        ['orderBy', 'name'],
+        ['offset', '30'],
+        ['limit', '10'],
+        [],
+      ];
 
-      request(app)
+      testData.request
         .get('/artist?offset=30&limit=10')
         .set('Accept', 'application/json')
         .expect(404)
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
-          artistCollection.query.args.should.deepEqual([
-            ['orderBy', 'name'],
-            ['offset', '30'],
-            ['limit', '10'],
-          ])
+          testDb.artistCollection.query.args.should.deepEqual(queryExpect);
           res.body.should.deepEqual({});
           res.text.should.equal('Not Found');
           done();
@@ -253,39 +184,31 @@ describe('get', function() {
 
   describe('model', function() {
     it('should return the specified row by name', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const testModel = collection.at(2);
-
-      request(app)
-        .get(`/artist/${testModel.get('name')}`)
+      testData.request
+        .get(`/artist/${testData.model.name}`)
         .set('Accept', 'application/json')
         .expect(200)
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
           Artist.query.args.should.deepEqual([
-            ['where', 'name', '=', testModel.get('name')],
+            ['where', 'name', '=', testData.model.name],
           ]);
-          res.body.should.deepEqual(testModel.toJSON());
+          res.body.should.deepEqual(testData.model);
           done();
         });
     });
 
     it('should return 404 if name does not exist', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const findName = `${faker.name.firstName()} ${faker.name.lastName()} ${faker.random.word()}`;
-
-      request(app)
-        .get(`/artist/${findName}`)
+      testData.request
+        .get(`/artist/${testData.findName}`)
         .set('Accept', 'application/json')
         .expect(404)
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
           Artist.query.args.should.deepEqual([
-            ['where', 'name', '=', findName],
+            ['where', 'name', '=', testData.findName],
           ]);
           res.body.should.deepEqual({});
           res.text.should.equal('Not Found');
@@ -298,14 +221,10 @@ describe('get', function() {
 describe('post', function() {
   describe('model', function() {
     it('should add a new record with a new id', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const newId = collection.length + 1;
-      const newName = `${faker.name.firstName()} ${faker.name.lastName()}`;
 
-      request(app)
+      testData.request
         .post(`/artist`)
-        .send({name: newName})
+        .send({name: testData.newName})
         .set('Accept', 'application/json')
         .expect(200)
         .expect('Content-Type', /json/)
@@ -313,22 +232,17 @@ describe('post', function() {
           if (err) throw err;
           Artist.query.args.should.deepEqual([]);
           res.body.should.deepEqual({
-            id: newId,
-            name: newName,
+            id: testData.newId,
+            name: testData.newName,
           });
           done();
         });
     });
 
     it('should override the specified id', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const newId = collection.length + 1;
-      const newName = `${faker.name.firstName()} ${faker.name.lastName()}`;
-
-      request(app)
+      testData.request
         .post(`/artist`)
-        .send({id: 1, name: newName})
+        .send({id: 1, name: testData.newName})
         .set('Accept', 'application/json')
         .expect(200)
         .expect('Content-Type', /json/)
@@ -336,18 +250,15 @@ describe('post', function() {
           if (err) throw err;
           Artist.query.args.should.deepEqual([]);
           res.body.should.deepEqual({
-            id: newId,
-            name: newName,
+            id: testData.newId,
+            name: testData.newName,
           });
           done();
         });
     });
 
     it('should reject on missing name', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-
-      request(app)
+      testData.request
         .post(`/artist`)
         .send({})
         .set('Accept', 'application/json')
@@ -363,13 +274,9 @@ describe('post', function() {
     });
 
     it('should reject on duplicate name', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const newName = collection.at(5).get('name');
-
-      request(app)
+      testData.request
         .post(`/artist`)
-        .send({name: newName})
+        .send({name: testData.duplicate.name})
         .set('Accept', 'application/json')
         .expect(400)
         .expect('Content-Type', /text\/html/)
@@ -377,19 +284,15 @@ describe('post', function() {
           if (err) throw err;
           Artist.query.args.should.deepEqual([]);
           res.body.should.deepEqual({});
-          res.text.should.equal(`artist: duplicate name '${newName}'`);
+          res.text.should.equal(`artist: duplicate name '${testData.duplicate.name}'`);
           done();
         });
     });
 
     it('should reject on extraneous fields', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const newName = `${faker.name.firstName()} ${faker.name.lastName()}`;
-
-      request(app)
+      testData.request
         .post(`/artist`)
-        .send({name: newName, gender: 'male', age: '156'})
+        .send({name: testData.newName, gender: 'male', age: '156'})
         .set('Accept', 'application/json')
         .expect(400)
         .expect('Content-Type', /text\/html/)
@@ -407,66 +310,51 @@ describe('post', function() {
 describe('put', function() {
   describe('model', function() {
     it('should update the artist name', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const testModel = collection.at(2);
-      const newName = `${faker.name.firstName()} ${faker.name.lastName()}`;
-
-      request(app)
-        .put(`/artist/${testModel.get('id')}`)
-        .send({name: newName})
+      testData.request
+        .put(`/artist/${testData.model.id}`)
+        .send({name: testData.newName})
         .set('Accept', 'application/json')
         .expect(200)
         .expect('Content-Type', /json/)
         .end(function(err, res) {
           if (err) throw err;
           Artist.query.args.should.deepEqual([
-            ['where', 'id', '=', testModel.get('id').toString()],
+            ['where', 'id', '=', testData.model.id.toString()],
           ]);
-          res.body.should.deepEqual({id: testModel.get('id'), name: newName});
+          res.body.should.deepEqual({id: testData.model.id, name: testData.newName});
           done();
         });
     });
 
     it('should reject on a duplicate name', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const testModel = collection.at(2);
-      const newName = collection.at(4).get('name');
-
-      request(app)
-        .put(`/artist/${testModel.get('id')}`)
-        .send({name: newName})
+      testData.request
+        .put(`/artist/${testData.model.id}`)
+        .send({name: testData.duplicate.name})
         .set('Accept', 'application/json')
         .expect(400)
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
           Artist.query.args.should.deepEqual([
-            ['where', 'id', '=', testModel.get('id').toString()],
+            ['where', 'id', '=', testData.model.id.toString()],
           ]);
           res.body.should.deepEqual({});
-          res.text.should.equal(`artist: duplicate name '${newName}'`);
+          res.text.should.equal(`artist: duplicate name '${testData.duplicate.name}'`);
           done();
         });
     });
 
     it('should return 404 on non-existent id', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const findId = collection.length + 1;
-      const newName = collection.at(4).get('name');
-
-      request(app)
-        .put(`/artist/${findId}`)
-        .send({name: newName})
+      testData.request
+        .put(`/artist/${testData.findId}`)
+        .send({name: testData.newName})
         .set('Accept', 'application/json')
         .expect(404)
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
           Artist.query.args.should.deepEqual([
-            ['where', 'id', '=', findId.toString()],
+            ['where', 'id', '=', testData.findId.toString()],
           ]);
           res.body.should.deepEqual({});
           res.text.should.equal('Not Found');
@@ -479,19 +367,15 @@ describe('put', function() {
 describe('delete', function() {
   describe('model', function() {
     it('should delete the model from the datatbase', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const testModel = collection.at(2);
-
-      request(app)
-        .delete(`/artist/${testModel.get('id')}`)
+      testData.request
+        .delete(`/artist/${testData.model.id}`)
         .set('Accept', 'application/json')
         .expect(200)
         .expect('Content-Type', /text\/plain/)
         .end(function(err, res) {
           if (err) throw err;
           Artist.query.args.should.deepEqual([
-            ['where', 'id', '=', testModel.get('id').toString()],
+            ['where', 'id', '=', testData.model.id.toString()],
           ]);
           res.body.should.deepEqual({});
           res.text.should.equal('OK');
@@ -500,19 +384,15 @@ describe('delete', function() {
     });
 
     it('should return 404 on non-existent id', function(done) {
-      const app = require('../app.js');
-      const collection = Artist.collection();
-      const findId = collection.length + 1;
-
-      request(app)
-        .delete(`/artist/${findId}`)
+      testData.request
+        .delete(`/artist/${testData.findId}`)
         .set('Accept', 'application/json')
         .expect(404)
         .expect('Content-Type', /text\/html/)
         .end(function(err, res) {
           if (err) throw err;
           Artist.query.args.should.deepEqual([
-            ['where', 'id', '=', findId.toString()],
+            ['where', 'id', '=', testData.findId.toString()],
           ]);
           res.body.should.deepEqual({});
           res.text.should.equal('Not Found');

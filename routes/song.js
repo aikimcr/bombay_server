@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../lib/db')();
 
-const Artist = db.model('artist');
+const song = db.model('song');
 
 /* Validate parameters */
 router.use((req, res, next) => {
@@ -24,12 +24,12 @@ router.use((req, res, next) => {
   }
 });
 
-/* GET artist listing. */
+/* GET song listing. */
 router.get('/', (req, res, next) => {
   const offset = req.query.offset || 0;
   const limit = req.query.limit || 10;
 
-  Artist
+  song
     .collection()
     .query('orderBy', 'name')
     .query('offset', offset.toString())
@@ -54,11 +54,11 @@ router.get('/', (req, res, next) => {
     });
 });
 
-/* GET an artist by name */
+/* GET an song by name */
 router.get('/:name', (req, res, next) => {
-  Artist
+  song
     .query('where', 'name', '=', req.params.name)
-    .fetch({debug: false})
+    .fetch()
     .then(model => {
       res.send(model.toJSON());
     })
@@ -67,7 +67,7 @@ router.get('/:name', (req, res, next) => {
     });
 });
 
-/* POST a new artist. */
+/* POST a new song. */
 router.post('/', (req, res, next) => {
   const reqBody = {...req.body};
   delete reqBody.name;
@@ -75,21 +75,21 @@ router.post('/', (req, res, next) => {
 
   let saveOpts = {name: req.body.name};
 
-  Artist.forge()
-    .save(saveOpts, {method: 'insert', debug: false})
-    .then(newArtist => {
-      res.send(newArtist.toJSON());
+  song.forge()
+    .save(saveOpts, {debug: true})
+    .then(newsong => {
+      res.send(newsong.toJSON());
     })
     .catch(err => {
       next(err);
     });
 });
 
-/* update an artist */
+/* update an song */
 router.put('/:id', (req, res, next) => {
-  Artist.fetchById(req.params.id)
+  song.fetchById(req.params.id)
     .then(model => {
-      return model.save({name: req.body.name}, {debug: false, patch: true});
+      return model.save({name: req.body.name}, {debug: true, patch: true});
     }, err => {
       return Promise.reject(createError(404));
     })
@@ -101,11 +101,11 @@ router.put('/:id', (req, res, next) => {
     });
 });
 
-/* delete an artist */
+/* delete an song */
 router.delete('/:id', (req, res, next) => {
-  Artist.fetchById(req.params.id)
+  song.fetchById(req.params.id)
     .then(model => {
-      return model.destroy({debug: false});
+      return model.destroy({debug: true});
     }, err => {
       return Promise.reject(createError(404));
     })

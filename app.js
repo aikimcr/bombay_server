@@ -13,6 +13,7 @@ const permissions = require('./lib/permissions');
 
 const indexRouter = require('./routes/index');
 const artistRouter = require('./routes/artist');
+const songRouter = require('./routes/song');
 
 const app = express();
 const port = 3000;
@@ -69,6 +70,7 @@ app.use(passport.session());
 
 app.use('/', indexRouter);
 app.use('/artist', permissions.authorize(), artistRouter);
+app.use('/song', permissions.authorize(), songRouter);
 
 app.post('/login',
   passport.authenticate('local', {  }),
