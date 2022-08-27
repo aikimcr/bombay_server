@@ -3,7 +3,6 @@ const sinon = require('sinon');
 const should = require('should');
 const faker = require('@faker-js/faker').faker;
 
-// TODO: This connection boilerplate doesn't really belong here.
 const db = require('../lib/db')({
   connection: ':memory:',
   pool: {
@@ -15,54 +14,34 @@ const db = require('../lib/db')({
 });
 const testDb = require('./lib/db');
 
-after(function () {
+after(() => {
   db.knex.destroy((err) => {
     console.log(err);
   })
-});
+})
 
 describe('artist', function () {
   const tableName = 'artist';
   const Artist = db.model(tableName);
 
-  const testData = {};
+  let testData = null;
 
   beforeEach(function (done) {
     testDb.buildSchema()
       .then(() => {
-        return testDb.loadTable(tableName, 25, (args) => {
-          const fakeName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
-          return { name: fakeName, ...args };
-        });
-      })
-      .then((artists) => {
-        testDb.stubPermissions();
-        testDb.stubArtist();
+        return testDb.tableDefs.loadModels({artist: true})
       })
       .then(() => {
-        testData.newName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
-        testData.findName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
-        return testDb.getTestModel(tableName, 2);
+        return testDb.getTestData(tableName);
       })
-      .then((testModel) => {
-        testData.model = testModel;
-        return testDb.getNextId(tableName);
-      })
-      .then((newId) => {
-        testData.newId = newId;
-        testData.findId = newId + 100;
-        return testDb.getTestModel(tableName, 4);
-      })
-      .then((dupModel) => {
-        const app = require('../app.js');
-        testData.duplicate = dupModel;
-        testData.request = request(app)
-        done()
+      .then((td) => {
+        testData = td;
+        done();
       })
       .catch((err) => {
         done(err);
       });
-  });
+  })
 
   describe('get', function () {
     describe('collection', function () {
@@ -382,6 +361,55 @@ describe('artist', function () {
             res.text.should.equal('OK');
             done();
           });
+      });
+
+      it('should reject if id is referenced by a song', function(done) {
+        const Song = db.model('song');
+        const songModel = testDb.tableDefs.song.buildModel({artist_id: testData.model.id});
+        Song.forge().save(songModel, {method: 'insert'})
+          .then((newSong) => {
+            testData.request
+              .delete(`/artist/${testData.model.id}`)
+              .set('Accept', 'application/json')
+              .expect(400)
+              .expect('Content-Type', /text\/html/)
+              .end(function (err, res) {
+                if (err) throw err;
+                Artist.query.args.should.deepEqual([
+                  ['where', 'id', '=', testData.model.id.toString()],
+                ]);
+                res.body.should.deepEqual({});
+                res.text.should.equal(`Attempt to delete artist with one reference`);
+                done();
+              });
+          })
+      });
+
+      it('should reject if id is referenced by multiple songs', function (done) {
+        const Song = db.model('song');
+        const songModel1 = testDb.tableDefs.song.buildModel({ artist_id: testData.model.id });
+        const songModel2 = testDb.tableDefs.song.buildModel({ artist_id: testData.model.id });
+
+        Song.forge().save(songModel1, { method: 'insert' })
+          .then((newSong) => {
+            return Song.forge().save(songModel2, { method: 'insert' });
+          })
+          .then((newSong2) => {
+            testData.request
+              .delete(`/artist/${testData.model.id}`)
+              .set('Accept', 'application/json')
+              .expect(400)
+              .expect('Content-Type', /text\/html/)
+              .end(function (err, res) {
+                if (err) throw err;
+                Artist.query.args.should.deepEqual([
+                  ['where', 'id', '=', testData.model.id.toString()],
+                ]);
+                res.body.should.deepEqual({});
+                res.text.should.equal(`Attempt to delete artist with 2 references`);
+                done();
+              });
+          })
       });
 
       it('should return 404 on non-existent id', function (done) {

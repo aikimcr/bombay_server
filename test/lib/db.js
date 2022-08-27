@@ -1,3 +1,4 @@
+const request = require('supertest')
 const { readFile } = require('fs').promises
 const { Readable } = require('stream')
 const readline = require('readline');
@@ -6,8 +7,9 @@ const path = require('path');
 const sinon = require('sinon');
 const faker = require('@faker-js/faker').faker;
 
-const db = require('../../lib/db')(':memory:');
+const db = require('../../lib/db')();
 const permissions = require('../../lib/permissions');
+const { toUnicode } = require('punycode');
 
 async function buildSchema() {
   const schemaFile = path.normalize('./sql/schema.sql');
@@ -115,10 +117,6 @@ exports.stubPermissions = () => {
   });
 };
 
-exports.restorePermissions = () => {
-  sinon.restoreObject(permissions);
-}
-
 function stubModel(tableName, unique = []) {
   const table = db.model(tableName);
   const collectionName = `${tableName}Collection`;
@@ -147,10 +145,98 @@ function stubModel(tableName, unique = []) {
   sinon.spy(table, 'query');
 };
 
-exports.restoreTable = (tableName) => {
-  const table = db.model(tableName);
-  sinon.restoreObject(table);
-}
-
 exports.stubArtist = stubModel.bind(undefined, 'artist', ['name']);
 exports.stubSong = stubModel.bind(undefined, 'song', ['name', 'artist_id']);
+
+// Create an iterator that circles through the ids as many time as necessary.
+const idIterators = {};
+const idIterator = (tableName) => {
+  if (idIterators[tableName]) {
+    return idIterators[tableName];
+  } else {
+    const originalList = tableDefs[tableName].ids;
+    const ids = [...originalList];
+
+    idIterators[tableName] = () => {
+      const result = ids.shift();
+      ids.push(result);
+      return result;
+    }
+
+    return idIterators[tableName];
+  }
+};
+
+const tableDefs = {
+  artist: {
+    ids: [],
+    buildModel: (args) => {
+      const fakeName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
+      return { name: fakeName, ...args };
+    },
+  },
+
+  song: {
+    ids: [],
+    buildModel: (args) => {
+
+      const nextArtistId = idIterator('artist');
+      const fakeName = faker.unique(faker.name.findName) // Deprecated and replaced by 'fullName' in a later faker release.
+      const fakeId = nextArtistId();
+
+      return {
+        name: fakeName,
+        artist_id: fakeId,
+        key_signature: '',
+        tempo: '',
+        lyrics: '',
+        ...args
+      }
+    }
+  }
+}
+
+tableDefs.loadModels = async (args = {artist: true}) => {
+  exports.stubPermissions();
+
+  const models = {};
+
+  if (args.artist) {
+    models.artist = await loadTable('artist', 25, tableDefs.artist.buildModel);
+    tableDefs.artist.ids = models.artist.map(artist => {
+      return artist.get('id');
+    });
+    delete idIterators.artist;
+    exports.stubArtist();
+  }
+
+  if (args.song && tableDefs.artist.ids.length > 0) {
+    models.song = await loadTable('song', 25, tableDefs.song.buildModel);
+    tableDefs.song.ids = models.song.map(song => {
+      return song.get('id');
+    });
+    delete idIterators.song;
+    exports.stubSong();
+  }
+
+  return models;
+}
+
+exports.tableDefs = tableDefs;
+
+exports.getTestData = async (tableName) => {
+  const testData = {
+    newName: faker.unique(faker.name.findName), // Deprecated and replaced by 'fullName' in a later faker release.
+    findName: faker.unique(faker.name.findName), // Deprecated and replaced by 'fullName' in a later faker release.
+  }
+
+  testData.model = await getTestModel(tableName, 2);
+  testData.newId = await getNextId(tableName);
+  testData.findId = await testData.newId;
+  testData.duplicate = await getTestModel(tableName, 4);
+
+  const app = require('../../app.js');
+  testData.request = request(app);
+
+  return testData;
+}
