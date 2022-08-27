@@ -1,5 +1,5 @@
-const { readFile } = require('fs').promises;
-const { Readable } = require('stream');
+const { readFile } = require('fs').promises
+const { Readable } = require('stream')
 const readline = require('readline');
 const path = require('path');
 
@@ -93,7 +93,14 @@ function loadTable(tableName, capacity, modelMaker) {
 
   while(tablePromises.length < capacity) {
     const modelDef = modelMaker({id: tablePromises.length + 1});
-    tablePromises.push(table.forge(modelDef).save(null, {method: 'insert'}));
+    tablePromises.push(table.forge().save(modelDef, {method: 'insert'}));
+
+    tablePromises[tablePromises.length - 1].catch((err) => {
+      console.log('--------------> ', error.code, ' <-------------');
+      console.log(tableName);
+      console.log(modelDef);
+      console.log(err);
+    })
   }
 
   return Promise.all(tablePromises);
@@ -108,6 +115,10 @@ exports.stubPermissions = () => {
   });
 };
 
+exports.restorePermissions = () => {
+  sinon.restoreObject(permissions);
+}
+
 function stubModel(tableName, unique = []) {
   const table = db.model(tableName);
   const collectionName = `${tableName}Collection`;
@@ -116,60 +127,8 @@ function stubModel(tableName, unique = []) {
     const model = new this();
 
     sinon.spy(model, 'fetch');
-    // sinon.stub(model, 'fetch').callsFake(function() {
-    //   return new Promise((resolve, reject) => {
-    //     const query = parseQueryArgs(table.query.args, exports[collectionName]);
-    //     const modelResult = exports[collectionName].at(query.tableQueryIndex);
-    //
-    //     if (modelResult) {
-    //       resolve(modelResult);
-    //     } else {
-    //       reject(new Error("No rows found"));
-    //     }
-    //   })
-    // });
-
     sinon.spy(model, 'save');
-    // sinon.stub(model, 'save').callsFake(function(attributes, options) {
-    //   return new Promise((resolve, reject) => {
-    //     const duplicate = exports[collectionName].find(model => {
-    //       return unique.reduce((memo, column) => {
-    //         return memo && model.get(column) === attributes[column];
-    //       }, true);
-    //     });
-    //
-    //     if (duplicate) {
-    //       reject({
-    //         code: 'SQLITE_CONSTRAINT',
-    //         message: `SQLITE_CONSTRAINT: duplicate: artist.name`,
-    //       });
-    //     } else {
-    //       if (options.patch) {
-    //         delete attributes.id;
-    //       } else {
-    //         attributes.id = exports[collectionName].length + 1;
-    //       }
-    //
-    //       model.set(attributes);
-    //       resolve(model);
-    //     }
-    //   });
-    // });
-
     sinon.spy(model, 'destroy');
-    // sinon.stub(model, 'destroy').callsFake(function(options) {
-    //   return new Promise((resolve, reject) => {
-    //     const query = parseQueryArgs(table.query.args, exports[collectionName]);
-    //     const modelResult = exports[collectionName].at(query.tableQueryIndex);
-    //
-    //     if (modelResult) {
-    //       exports[collectionName].remove(modelResult);
-    //       resolve({});
-    //     } else {
-    //       reject(new Error("No rows found"));
-    //     }
-    //   })
-    // })
 
     return model;
   });
@@ -178,48 +137,20 @@ function stubModel(tableName, unique = []) {
     const collection = new db.Collection();
     collection.model = table;
 
-    // const modelsPromise = new Promise((resolve, reject) => {
-    //   const models = [];
-    //
-    //   for(let i=0; i<50; i++) {
-    //     const model = table.forge();
-    //     model.set({
-    //       id: i+1,
-    //       name: `${faker.name.firstName()} ${faker.name.lastName()}`,
-    //     });
-    //     models.push(model);
-    //   }
-    //
-    //   const tmpCollection = new db.Collection(models);
-    //   collection.reset(tmpCollection.slice(0, 25));
-    //   resolve(collection);
-    // });
-
     sinon.spy(collection, 'fetch');
-    // sinon.stub(collection, 'fetch').callsFake(async function() {
-    //   await modelsPromise;
-    //   const query = parseQueryArgs(this.query.args);
-    //   const collectionModels = this.sortBy(query.orderBy).slice(query.offset, query.offset + query.limit);
-    //
-    //   const collection = new db.Collection(collectionModels);
-    //
-    //   if (collection.length < collectionModels.length) {
-    //     throw new Error(`Collection length does not match models: ${collection.length}(C) !== ${collectionModels.length}(M).`);
-    //   }
-    //
-    //   return collection;
-    // });
-
     sinon.spy(collection, 'query');
-    // sinon.stub(collection, 'query').returns(collection);
 
     exports[collectionName] = collection;
     return collection;
   })
 
   sinon.spy(table, 'query');
-  // sinon.stub(table, 'query').returns(table.forge());
 };
+
+exports.restoreTable = (tableName) => {
+  const table = db.model(tableName);
+  sinon.restoreObject(table);
+}
 
 exports.stubArtist = stubModel.bind(undefined, 'artist', ['name']);
 exports.stubSong = stubModel.bind(undefined, 'song', ['name', 'artist_id']);

@@ -4,25 +4,70 @@ const router = express.Router();
 const db = require('../lib/db')();
 
 const song = db.model('song');
+const tableColumns = ['name', 'artist_id', 'key_signature', 'tempo', 'lyrics'];
 
 /* Validate parameters */
 router.use((req, res, next) => {
-  if (req.method.toLowerCase() === 'get' || req.method.toLowerCase() === 'delete') {
-    return next();
-  }
+  switch (req.method.toLowerCase()) {
+    case 'get':
+    case 'delete':
+      return next();
 
-  const reqBody = {...req.body};
-  delete reqBody.name;
-  delete reqBody.id;
+    case 'post':
+    case 'put':
+      const reqBody = {...req.body};
+      tableColumns.forEach((column, i) => {
+        delete reqBody[column];
+      });
 
-  if (Object.keys(reqBody).length > 0) {
-    res.status(400).send(`Unexpected data found: '${JSON.stringify(reqBody)}'`);
-  } else if (!req.body.name) {
-    res.status(400).send('Name must be specified');
-  } else {
-    return next();
+      delete reqBody.id;
+
+      if (Object.keys(reqBody).length > 0) {
+        res.status(400).send(`Unexpected data found: '${JSON.stringify(reqBody)}'`);
+      } else {
+        return next();
+      }
+      break;
+
+    default: res.status(500).send(`Unrecognized method ${req.method}`);
   }
 });
+
+router.use((req, res, next) => {
+  switch (req.method.toLowerCase()) {
+    case 'get':
+    case 'delete':
+      return next();
+
+    case 'post':
+      if (!req.body.name) {
+        res.status(400).send('Name must be specified');
+        break; // Don't fall through if there's an error
+      } else if (!req.body.artist_id) {
+        res.status(400).send('Artist ID must be specified');
+        break; // Don't fall through if there's an error
+      }
+
+    case 'put':
+      // Fall through from post, or come here directly for put
+      if (req.body.artist_id) {
+        const Artist = db.model('artist');
+
+        Artist.fetchById(req.body.artist_id)
+          .then((artistModel) => {
+            return next();
+          })
+          .catch((err) => {
+            res.status(400).send(`Invalid artist id specified: '${req.body.artist_id}'`)
+          });
+      } else {
+        return next();
+      }
+      break;
+
+    default: res.status(500).send(`Unrecognized method ${req.method}`);
+  }
+})
 
 /* GET song listing. */
 router.get('/', (req, res, next) => {
@@ -69,14 +114,14 @@ router.get('/:name', (req, res, next) => {
 
 /* POST a new song. */
 router.post('/', (req, res, next) => {
-  const reqBody = {...req.body};
-  delete reqBody.name;
-  delete reqBody.id;
+  const saveOpts = {};
 
-  let saveOpts = {name: req.body.name};
+  tableColumns.forEach((column) => {
+    saveOpts[column] = req.body[column];
+  });
 
   song.forge()
-    .save(saveOpts, {debug: true})
+    .save(saveOpts)
     .then(newsong => {
       res.send(newsong.toJSON());
     })
@@ -87,9 +132,17 @@ router.post('/', (req, res, next) => {
 
 /* update an song */
 router.put('/:id', (req, res, next) => {
+  const saveOpts = {};
+
+  tableColumns.forEach((column) => {
+    if (req.body.hasOwnProperty(column)) {
+      saveOpts[column] = req.body[column];
+    }
+  });
+
   song.fetchById(req.params.id)
     .then(model => {
-      return model.save({name: req.body.name}, {debug: true, patch: true});
+      return model.save(saveOpts, {patch: true});
     }, err => {
       return Promise.reject(createError(404));
     })
@@ -105,7 +158,7 @@ router.put('/:id', (req, res, next) => {
 router.delete('/:id', (req, res, next) => {
   song.fetchById(req.params.id)
     .then(model => {
-      return model.destroy({debug: true});
+      return model.destroy();
     }, err => {
       return Promise.reject(createError(404));
     })
@@ -123,8 +176,12 @@ router.use(function(err, req, res, next) {
   } else {
     switch(err.code) {
       case 'SQLITE_CONSTRAINT':
-        const [table, column] = err.message.match(/:\s*([^:]+)$/)[1].split('.');
-        next(createError(400, `${table}: duplicate ${column} '${req.body[column]}'`));
+        const columns = err.message.match(/:\s*([^:]+)$/)[1].replace(/song\./g, '');
+        const columnNames = columns.split(/\s*,\s*/);
+        const values = columnNames.map((name) => {
+          return `'${req.body[name]}'`;
+        }).join(', ');
+        next(createError(400, `song: duplicate ${columns} [${values}]`));
         break;
 
       default: next(createError(400, 'Invalid request')); break;

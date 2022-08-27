@@ -7,8 +7,10 @@
     "email": "aikimcr@gmail.com"
   },
   "scripts": {
-    "start": "node app.js",
-    "test": "mocha --require test/lib/hooks.js --reporter tap --timeout 10000"
+    "start": "./bin/www",
+    "start:debug": "node --inspect-brk=45.79.98.74:3001 ./bin/www",
+    "test": "mocha --require test/lib/hooks.js --watch --reporter tap --timeout 10000",
+    "test:debug": "mocha --inspect-brk=45.79.98.74:3001 --require test/lib/hooks.js --watch --reporter tap --timeout 10000"
   },
   "dependencies": {
     "bookshelf": "^1.2.0",
@@ -26,6 +28,11 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^6.0.0",
+    "eslint": "^8.22.0",
+    "eslint-config-standard": "^17.0.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-n": "^15.2.5",
+    "eslint-plugin-promise": "^6.0.1",
     "grunt": "^1.5.3",
     "should": "^13.2.3",
     "sinon": "^14.0.0",
