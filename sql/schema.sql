@@ -76,6 +76,7 @@ CREATE TABLE song (
   UNIQUE (name, artist_id)
 );
 
+/*
 CREATE TABLE band_song (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   band_id INTEGER NOT NULL,
@@ -254,6 +255,7 @@ CREATE TABLE schema_change (
 
 INSERT INTO user (name, full_name, password, system_admin)
   VALUES ('admin', 'Administrator', 'admin', 1);
+*/
 
 /*
 INSERT INTO schema_change (name, timestamp)

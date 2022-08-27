@@ -58,7 +58,7 @@ router.get('/', (req, res, next) => {
 router.get('/:name', (req, res, next) => {
   Artist
     .query('where', 'name', '=', req.params.name)
-    .fetch()
+    .fetch({debug: false})
     .then(model => {
       res.send(model.toJSON());
     })
@@ -76,7 +76,7 @@ router.post('/', (req, res, next) => {
   let saveOpts = {name: req.body.name};
 
   Artist.forge()
-    .save(saveOpts, {debug: true})
+    .save(saveOpts, {method: 'insert', debug: false})
     .then(newArtist => {
       res.send(newArtist.toJSON());
     })
@@ -89,7 +89,7 @@ router.post('/', (req, res, next) => {
 router.put('/:id', (req, res, next) => {
   Artist.fetchById(req.params.id)
     .then(model => {
-      return model.save({name: req.body.name}, {debug: true, patch: true});
+      return model.save({name: req.body.name}, {debug: false, patch: true});
     }, err => {
       return Promise.reject(createError(404));
     })
@@ -105,7 +105,7 @@ router.put('/:id', (req, res, next) => {
 router.delete('/:id', (req, res, next) => {
   Artist.fetchById(req.params.id)
     .then(model => {
-      return model.destroy({debug: true});
+      return model.destroy({debug: false});
     }, err => {
       return Promise.reject(createError(404));
     })
