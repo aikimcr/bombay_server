@@ -9,7 +9,8 @@
   "scripts": {
     "start": "./bin/www",
     "start:debug": "node --inspect-brk=45.79.98.74:3001 ./bin/www",
-    "test": "mocha --require test/lib/hooks.js --watch --reporter tap --timeout 10000",
+    "test": "mocha --require test/lib/hooks.js --reporter tap --timeout 10000",
+    "test:watch": "mocha --require test/lib/hooks.js --watch --reporter tap --timeout 10000",
     "test:debug": "mocha --inspect-brk=45.79.98.74:3001 --require test/lib/hooks.js --watch --reporter tap --timeout 10000"
   },
   "dependencies": {

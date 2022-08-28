@@ -4,25 +4,52 @@ const router = express.Router();
 const db = require('../lib/db')();
 
 const Artist = db.model('artist');
+const tableColumns = ['name'];
 
 /* Validate parameters */
 router.use((req, res, next) => {
-  if (req.method.toLowerCase() === 'get' || req.method.toLowerCase() === 'delete') {
-    return next();
-  }
+  switch (req.method.toLowerCase()) {
+    case 'get':
+    case 'delete':
+      return next();
 
-  const reqBody = {...req.body};
-  delete reqBody.name;
-  delete reqBody.id;
+    case 'post':
+    case 'put':
+      const reqBody = { ...req.body };
+      tableColumns.forEach((column, i) => {
+        delete reqBody[column];
+      });
 
-  if (Object.keys(reqBody).length > 0) {
-    res.status(400).send(`Unexpected data found: '${JSON.stringify(reqBody)}'`);
-  } else if (!req.body.name) {
-    res.status(400).send('Name must be specified');
-  } else {
-    return next();
+      delete reqBody.id;
+
+      if (Object.keys(reqBody).length > 0) {
+        res.status(400).send(`Unexpected data found: '${JSON.stringify(reqBody)}'`);
+      } else {
+        return next();
+      }
+      break;
+
+    default: res.status(500).send(`Unrecognized method ${req.method}`);
   }
 });
+
+router.use((req, res, next) => {
+  switch (req.method.toLowerCase()) {
+    case 'get':
+    case 'delete':
+      return next();
+
+    case 'post':
+    case 'put':
+      if (!req.body.name) {
+        res.status(400).send('Name must be specified');
+        break; // Don't fall through if there's an error
+      }
+      return next();
+
+    default: res.status(500).send(`Unrecognized method ${req.method}`);
+  }
+})
 
 /* GET artist listing. */
 router.get('/', (req, res, next) => {
@@ -105,7 +132,21 @@ router.put('/:id', (req, res, next) => {
 router.delete('/:id', (req, res, next) => {
   Artist.fetchById(req.params.id)
     .then(model => {
-      return model.destroy({debug: false});
+      const Song = db.model('song');
+
+      return Song
+        .collection()
+        .query('where', 'artist_id', '=', model.get('id'))
+        .count('id')
+        .then((songCount) => {
+          if (songCount === 0) {
+            return model.destroy({debug: false});
+          } else if (songCount === 1) {
+            return Promise.reject(createError(400, 'Attempt to delete artist with one reference'));
+          } else {
+            return Promise.reject(createError(400, `Attempt to delete artist with ${songCount} references`));
+          }
+        });
     }, err => {
       return Promise.reject(createError(404));
     })

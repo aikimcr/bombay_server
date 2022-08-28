@@ -10,15 +10,14 @@ const db = require('../lib/db')({
     min: 1,
     max: 1,
     disposeTimeout: 360000 * 1000,
-    idleTimeoutMillis: 360000 * 1000
-  }
-})
-
+    idleTimeoutMillis: 360000 * 1000,
+  },
+});
 const testDb = require('./lib/db')
 
-after(function () {
+after(() => {
   db.knex.destroy((err) => {
-    console.log(err)
+    console.log(err);
   })
 })
 
@@ -26,68 +25,23 @@ describe('song', function () {
   const tableName = 'song'
   const Song = db.model(tableName)
 
-  const testData = {}
-  let artists = []
-  let artistIds = []
-
-  function buildModel(args) {
-    const fakeName = faker.unique(faker.name.findName) // Deprecated and replaced by 'fullName' in a later faker release.
-    const fakeId = artistIds[faker.datatype.number(artistIds.length - 1)]
-    return {
-      name: fakeName,
-      artist_id: fakeId,
-      key_signature: '',
-      tempo: '',
-      lyrics: '',
-      ...args
-    }
-  }
+  let testData = null;
 
   beforeEach(function (done) {
     testDb.buildSchema()
       .then(() => {
-        return testDb.loadTable('artist', 25, (args) => {
-          const fakeName = faker.unique(faker.name.findName) // Deprecated and replaced by 'fullName' in a later faker release.
-          return { name: fakeName, ...args }
-        })
-      })
-      .then((artistModels) => {
-        artists = artistModels
-
-        artistIds = artists.map(artist => {
-          return artist.get('id')
-        })
-
-        return testDb.loadTable(tableName, 25, buildModel)
-      })
-      .then((songs) => {
-        testDb.stubPermissions()
-        testDb.stubArtist()
-        testDb.stubSong()
+        return testDb.tableDefs.loadModels({artist: true, song: true})
       })
       .then(() => {
-        testData.newName = faker.unique(faker.name.findName) // Deprecated and replaced by 'fullName' in a later faker release.
-        testData.findName = faker.unique(faker.name.findName) // Deprecated and replaced by 'fullName' in a later faker release.
-        return testDb.getTestModel(tableName, 2)
+        return testDb.getTestData(tableName);
       })
-      .then((testModel) => {
-        testData.model = testModel
-        return testDb.getNextId(tableName)
-      })
-      .then((newId) => {
-        testData.newId = newId
-        testData.findId = newId + 100
-        return testDb.getTestModel(tableName, 4)
-      })
-      .then((dupModel) => {
-        const app = require('../app.js')
-        testData.duplicate = dupModel
-        testData.request = request(app)
-        done()
+      .then((td) => {
+        testData = td;
+        done();
       })
       .catch((err) => {
-        done(err)
-      })
+        done(err);
+      });
   })
 
   describe('get', function () {
@@ -248,7 +202,7 @@ describe('song', function () {
   describe('post', function () {
     describe('model', function () {
       it('should add a new record with a new id', function (done) {
-        const model = buildModel({ name: testData.newName });
+        const model = testDb.tableDefs.song.buildModel({ name: testData.newName });
         testData.request
           .post('/song')
           .send(model)
@@ -267,7 +221,7 @@ describe('song', function () {
       })
 
       it('should override the specified id', function (done) {
-        const model = buildModel({ id: 1, name: testData.newName });
+        const model = testDb.tableDefs.song.buildModel({ id: 1, name: testData.newName });
         testData.request
           .post('/song')
           .send(model)
@@ -286,7 +240,7 @@ describe('song', function () {
       })
 
       it('should reject on missing name', function (done) {
-        const model = buildModel({});
+        const model = testDb.tableDefs.song.buildModel({});
         delete model.name;
         testData.request
           .post('/song')
@@ -304,7 +258,7 @@ describe('song', function () {
       })
 
       it('should reject on missing artist_id', function (done) {
-        const model = buildModel({});
+        const model = testDb.tableDefs.song.buildModel({});
         delete model.artist_id;
         testData.request
           .post('/song')
@@ -322,7 +276,7 @@ describe('song', function () {
       })
 
       it('should reject on duplicate name/artist_id', function (done) {
-        const model = buildModel({});
+        const model = testDb.tableDefs.song.buildModel({});
         model.name = testData.duplicate.name;
         model.artist_id = testData.duplicate.artist_id;
         testData.request
@@ -341,8 +295,8 @@ describe('song', function () {
       })
 
       it('should reject on invalid artist_id', function (done) {
-        const model = buildModel({});
-        model.artist_id = Math.max(...artistIds) + 10;
+        const model = testDb.tableDefs.song.buildModel({});
+        model.artist_id = Math.max(...testDb.tableDefs.artist.ids) + 10;
         testData.request
           .post('/song')
           .send(model)
@@ -400,10 +354,10 @@ describe('song', function () {
 
       it('should update the artist id', function (done) {
         let newArtistId = testData.model.artist_id + 1;
-        let artistIdIdx = artistIds.indexOf(newArtistId);
+        let artistIdIdx = testDb.tableDefs.artist.ids.indexOf(newArtistId);
 
         if (artistIdIdx === -1) {
-          newArtistId = artistIds[0];
+          newArtistId = testDb.tableDefs.artist.ids[0];
         }
 
         testData.request
@@ -447,7 +401,7 @@ describe('song', function () {
       })
 
       it('should reject on an invalid artist id', function (done) {
-        const newArtistId = Math.max(...artistIds) + 10;
+        const newArtistId = Math.max(...testDb.tableDefs.artist.ids) + 10;
         testData.request
           .put(`/song/${testData.model.id}`)
           .send({ artist_id: newArtistId })
