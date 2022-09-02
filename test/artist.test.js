@@ -47,7 +47,6 @@ describe('artist', function () {
     describe('collection', function () {
       function bodyExpect(queryExpect) {
         const query = testDb.parseQueryArgs(queryExpect);
-        const newOffset = query.offset + query.limit;
         const queryBuilder = db.knex(tableName);
         queryExpect.forEach((arg) => {
           if (arg.length > 0) {
@@ -57,13 +56,29 @@ describe('artist', function () {
 
         return queryBuilder.select()
           .then((result) => {
-            let body = { data: result };
+            let body = {
+              data: result.map((row) => {
+                return {
+                  ...row,
+                  url: `http://127.0.0.1/artist/${row.id}`,
+                }
+              }),
+            };
 
             if (body.data.length >= query.limit) {
-              body.nextPage = `http://127.0.0.1:3000/artist/?offset=${newOffset}&limit=${query.limit}`;
+              const newOffset = query.offset + query.limit;
+              body.nextPage = `http://127.0.0.1/artist/?offset=${newOffset}&limit=${query.limit}`;
+            }
+
+            if (query.offset > 0) {
+              const newOffset = Math.max(query.offset - query.limit, 0);
+              body.prevPage = `http://127.0.0.1/artist/?offset=${newOffset}&limit=${query.limit}`;
             }
 
             return Promise.resolve(body);
+          })
+          .catch((err) => {
+            console.log(err);
           });
       };
 
@@ -87,6 +102,9 @@ describe('artist', function () {
               .then(function (expectation) {
                 res.body.should.deepEqual(expectation);
                 done();
+              })
+              .catch((err) => {
+                done(err);
               });
           });
       });
@@ -111,6 +129,9 @@ describe('artist', function () {
               .then(function (expectation) {
                 res.body.should.deepEqual(expectation);
                 done();
+              })
+              .catch((err) => {
+                done(err);
               });
           });
       });
@@ -135,6 +156,9 @@ describe('artist', function () {
               .then(function (expectation) {
                 res.body.should.deepEqual(expectation);
                 done();
+              })
+              .catch((err) => {
+                done(err);
               });
           });
       });
@@ -174,7 +198,30 @@ describe('artist', function () {
             Artist.query.args.should.deepEqual([
               ['where', 'name', '=', testData.model.name],
             ]);
-            res.body.should.deepEqual(testData.model);
+            res.body.should.deepEqual({
+              ...testData.model,
+              url: `http://127.0.0.1/artist/${testData.model.id}`,
+            });
+            done();
+          });
+      });
+
+      it('should return the specified row by id', function (done) {
+        testData.request
+          .get(`/artist/${testData.model.id}`)
+          .set('Accept', 'application/json')
+          .expect(200)
+          .expect('Content-Type', /json/)
+          .end(function (err, res) {
+            if (err) throw err;
+            Artist.query.args.should.deepEqual([
+              ['where', 'name', '=', testData.model.id.toString()],
+              ['where', 'id', '=', testData.model.id.toString()],
+            ]);
+            res.body.should.deepEqual({
+              ...testData.model,
+              url: `http://127.0.0.1/artist/${testData.model.id}`,
+            });
             done();
           });
       });
@@ -214,6 +261,7 @@ describe('artist', function () {
             res.body.should.deepEqual({
               id: testData.newId,
               name: testData.newName,
+              url: `http://127.0.0.1/artist/${testData.newId}`,
             });
             done();
           });
@@ -232,6 +280,7 @@ describe('artist', function () {
             res.body.should.deepEqual({
               id: testData.newId,
               name: testData.newName,
+              url: `http://127.0.0.1/artist/${testData.newId}`,
             });
             done();
           });
@@ -301,7 +350,11 @@ describe('artist', function () {
             Artist.query.args.should.deepEqual([
               ['where', 'id', '=', testData.model.id.toString()],
             ]);
-            res.body.should.deepEqual({ id: testData.model.id, name: testData.newName });
+            res.body.should.deepEqual({
+              id: testData.model.id,
+              name: testData.newName,
+              url: `http://127.0.0.1/artist/${testData.model.id}`,
+            });
             done();
           });
       });

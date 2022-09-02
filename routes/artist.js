@@ -1,10 +1,32 @@
 const createError = require('http-errors');
 const express = require('express');
 const router = express.Router();
+
 const db = require('../lib/db')();
+const dbDebug = false;
 
 const Artist = db.model('artist');
 const tableColumns = ['name'];
+
+const routeUtils = require('../lib/routeUtils');
+
+async function normalizeModel(req, model) {
+  const url = routeUtils.getModelUrl(req, model);
+
+  return {
+    ...model,
+    url: url,
+  };
+}
+
+async function normalizeList(req, list) {
+  const newList = await list.map(async (model) => {
+    const newModel = await normalizeModel(req, model);
+    return newModel;
+  });
+
+  return Promise.all(newList);
+}
 
 /* Validate parameters */
 router.use((req, res, next) => {
@@ -61,36 +83,56 @@ router.get('/', (req, res, next) => {
     .query('orderBy', 'name')
     .query('offset', offset.toString())
     .query('limit', limit.toString())
-    .fetch()
+    .fetch({debug: dbDebug})
     .then((collection) => {
-      const data = collection.toJSON();
-
-      if (data.length > 0) {
-        let body = {
-          data: data
-        }
-        if(data.length >= Number(limit)) {
-          const port = req.app.port || 3000;
-          const newOffset = `${Number(offset) + Number(limit)}`;
-          body.nextPage = `${req.protocol}://${req.hostname}:${port}${req.baseUrl}${req.path}?offset=${newOffset}&limit=${limit}`;
-        }
-        res.send(body);
+      if (collection.length > 0) {
+        const data = collection.toJSON();
+        return normalizeList(req, data)
+          .catch((err) => {
+            next(err);
+          });
       } else {
         next(createError(404));
       }
+    })
+    .then((data) => {
+      const refs = routeUtils.getPageUrls(req, data);
+
+      let body = {
+        data: data,
+        ...refs,
+      }
+      
+      res.send(body);
     });
 });
 
 /* GET an artist by name */
-router.get('/:name', (req, res, next) => {
+router.get('/:nameorid', (req, res, next) => {
   Artist
-    .query('where', 'name', '=', req.params.name)
-    .fetch({debug: false})
+    .query('where', 'name', '=', req.params.nameorid)
+    .fetch({ debug: dbDebug })
     .then(model => {
-      res.send(model.toJSON());
+      return normalizeModel(req, model.toJSON());
+    })
+    .then((model) => {
+      res.send(model);
     })
     .catch(err => {
-      next(createError(404));
+      if(req.params.nameorid.match(/^\d+$/)) {
+        Artist.fetchById(req.params.nameorid)
+          .then(model => {
+            return normalizeModel(req, model.toJSON());
+          })
+          .then((model) => {
+            res.send(model);
+          })
+          .catch(err => {
+            next(createError(404));
+          })
+      } else {
+        next(createError(404));
+      }
     });
 });
 
@@ -103,9 +145,12 @@ router.post('/', (req, res, next) => {
   let saveOpts = {name: req.body.name};
 
   Artist.forge()
-    .save(saveOpts, {method: 'insert', debug: false})
+    .save(saveOpts, {method: 'insert', debug: dbDebug})
     .then(newArtist => {
-      res.send(newArtist.toJSON());
+      return normalizeModel(req, newArtist.toJSON());
+    })
+    .then(newArtist => {
+      res.send(newArtist);
     })
     .catch(err => {
       next(err);
@@ -116,12 +161,15 @@ router.post('/', (req, res, next) => {
 router.put('/:id', (req, res, next) => {
   Artist.fetchById(req.params.id)
     .then(model => {
-      return model.save({name: req.body.name}, {debug: false, patch: true});
+      return model.save({name: req.body.name}, {debug: dbDebug, patch: true});
     }, err => {
       return Promise.reject(createError(404));
     })
     .then(model => {
-      res.send(model.toJSON());
+      return normalizeModel(req, model.toJSON());
+    })
+    .then(model => {
+      res.send(model);
     })
     .catch(err => {
       next(err);
@@ -140,7 +188,7 @@ router.delete('/:id', (req, res, next) => {
         .count('id')
         .then((songCount) => {
           if (songCount === 0) {
-            return model.destroy({debug: false});
+            return model.destroy({ debug: dbDebug });
           } else if (songCount === 1) {
             return Promise.reject(createError(400, 'Attempt to delete artist with one reference'));
           } else {

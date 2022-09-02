@@ -28,6 +28,8 @@ describe('song', function () {
   let testData = null;
 
   beforeEach(function (done) {
+    const Artist = db.model('artist');
+
     testDb.buildSchema()
       .then(() => {
         return testDb.tableDefs.loadModels({artist: true, song: true})
@@ -35,8 +37,16 @@ describe('song', function () {
       .then(() => {
         return testDb.getTestData(tableName);
       })
-      .then((td) => {
+      .then(td => {
         testData = td;
+        return Artist.fetchById(testData.model.artist_id);
+      })
+      .then(artist => {
+        testData.artist = {
+          ...artist.toJSON(),
+          url: `http://127.0.0.1/artist/${artist.get('id')}`,
+        };
+
         done();
       })
       .catch((err) => {
@@ -48,7 +58,6 @@ describe('song', function () {
     describe('collection', function () {
       function bodyExpect(queryExpect) {
         const query = testDb.parseQueryArgs(queryExpect)
-        const newOffset = query.offset + query.limit
         const queryBuilder = db.knex(tableName)
         queryExpect.forEach((arg) => {
           if (arg.length > 0) {
@@ -58,10 +67,38 @@ describe('song', function () {
 
         return queryBuilder.select()
           .then((result) => {
-            const body = { data: result }
+            const Artist = db.model('artist');
+
+            const artistPromises = result.map(row => {
+              return Artist.fetchById(row.artist_id)
+                .then(artist => {
+                  const artistJSON = {
+                    ...artist.toJSON(),
+                    url: `http://127.0.0.1/artist/${artist.get('id')}`,
+                  }
+                  return Promise.resolve({
+                    ...row,
+                    url: `http://127.0.0.1/song/${row.id}`,
+                    artist: artistJSON,
+                  });
+                });
+              })
+
+            return Promise.all(artistPromises);
+          })
+          .then(result => {
+            const body = {
+              data: result,
+            }
 
             if (body.data.length >= query.limit) {
-              body.nextPage = `http://127.0.0.1:3000/song/?offset=${newOffset}&limit=${query.limit}`
+              const newOffset = query.offset + query.limit
+              body.nextPage = `http://127.0.0.1/song/?offset=${newOffset}&limit=${query.limit}`
+            }
+
+            if (query.offset > 0) {
+              const newOffset = Math.max(query.offset - query.limit, 0);
+              body.prevPage = `http://127.0.0.1/song/?offset=${newOffset}&limit=${query.limit}`;
             }
 
             return Promise.resolve(body)
@@ -89,6 +126,9 @@ describe('song', function () {
                 res.body.should.deepEqual(expectation)
                 done()
               })
+              .catch((err) => {
+                done(err);
+              })
           })
       })
 
@@ -113,6 +153,9 @@ describe('song', function () {
                 res.body.should.deepEqual(expectation)
                 done()
               })
+              .catch((err) => {
+                done(err);
+              })
           })
       })
 
@@ -136,6 +179,9 @@ describe('song', function () {
               .then(function (expectation) {
                 res.body.should.deepEqual(expectation)
                 done()
+              })
+              .catch((err) => {
+                done(err);
               })
           })
       })
@@ -175,12 +221,37 @@ describe('song', function () {
             Song.query.args.should.deepEqual([
               ['where', 'name', '=', testData.model.name]
             ])
-            res.body.should.deepEqual(testData.model)
+            res.body.should.deepEqual({
+              ...testData.model,
+              url: `http://127.0.0.1/song/${testData.model.id}`,
+              artist: testData.artist,
+            })
             done()
           })
       })
 
-      it('should return 404 if name does not exist', function (done) {
+      it('should return the specified row by id', function (done) {
+        testData.request
+          .get(`/song/${testData.model.id}`)
+          .set('Accept', 'application/json')
+          .expect(200)
+          .expect('Content-Type', /json/)
+          .end(function (err, res) {
+            if (err) throw err
+            Song.query.args.should.deepEqual([
+              ['where', 'name', '=', testData.model.id.toString()],
+              ['where', 'id', '=', testData.model.id.toString()],
+            ])
+            res.body.should.deepEqual({
+              ...testData.model, 
+              url: `http://127.0.0.1/song/${testData.model.id}`,
+              artist: testData.artist,
+            })
+            done()
+          })
+      })
+
+     it('should return 404 if name does not exist', function (done) {
         testData.request
           .get(`/song/${testData.findName}`)
           .set('Accept', 'application/json')
@@ -203,40 +274,64 @@ describe('song', function () {
     describe('model', function () {
       it('should add a new record with a new id', function (done) {
         const model = testDb.tableDefs.song.buildModel({ name: testData.newName });
-        testData.request
-          .post('/song')
-          .send(model)
-          .set('Accept', 'application/json')
-          .expect(200)
-          .expect('Content-Type', /json/)
-          .end(function (err, res) {
-            if (err) throw err
-            Song.query.args.should.deepEqual([])
-            res.body.should.deepEqual({
-              id: testData.newId,
-              ...model,
-            })
-            done()
-          })
+        const Artist = db.model('artist');
+
+        Artist.fetchById(model.artist_id)
+          .then(artistModel => {
+            const artist = {
+              ...artistModel.toJSON(),
+              url: `http://127.0.0.1/artist/${model.artist_id}`,
+            }
+
+            testData.request
+              .post('/song')
+              .send(model)
+              .set('Accept', 'application/json')
+              .expect(200)
+              .expect('Content-Type', /json/)
+              .end(function (err, res) {
+                if (err) throw err
+                Song.query.args.should.deepEqual([])
+                res.body.should.deepEqual({
+                  id: testData.newId,
+                  ...model,
+                  url: `http://127.0.0.1/song/${testData.newId}`,
+                  artist: artist,
+                })
+                done()
+              })
+        })
       })
 
       it('should override the specified id', function (done) {
         const model = testDb.tableDefs.song.buildModel({ id: 1, name: testData.newName });
-        testData.request
-          .post('/song')
-          .send(model)
-          .set('Accept', 'application/json')
-          .expect(200)
-          .expect('Content-Type', /json/)
-          .end(function (err, res) {
-            if (err) throw err
-            Song.query.args.should.deepEqual([])
-            res.body.should.deepEqual({
-              ...model,
-              id: testData.newId,
-            })
-            done()
-          })
+        const Artist = db.model('artist');
+
+        Artist.fetchById(model.artist_id)
+          .then(artistModel => {
+            const artist = {
+              ...artistModel.toJSON(),
+              url: `http://127.0.0.1/artist/${model.artist_id}`,
+            }
+
+            testData.request
+              .post('/song')
+              .send(model)
+              .set('Accept', 'application/json')
+              .expect(200)
+              .expect('Content-Type', /json/)
+              .end(function (err, res) {
+                if (err) throw err
+                Song.query.args.should.deepEqual([])
+                res.body.should.deepEqual({
+                  ...model,
+                  id: testData.newId,
+                  url: `http://127.0.0.1/song/${testData.newId}`,
+                  artist: artist,
+                })
+                done()
+              })
+        })
       })
 
       it('should reject on missing name', function (done) {
@@ -347,6 +442,8 @@ describe('song', function () {
             res.body.should.deepEqual({
               ...testData.model,
               name: testData.newName,
+              url: `http://127.0.0.1/song/${testData.model.id}`,
+              artist: testData.artist,
             })
             done()
           })
@@ -360,23 +457,35 @@ describe('song', function () {
           newArtistId = testDb.tableDefs.artist.ids[0];
         }
 
-        testData.request
-          .put(`/song/${testData.model.id}`)
-          .send({ artist_id: newArtistId })
-          .set('Accept', 'application/json')
-          .expect(200)
-          .expect('Content-Type', /json/)
-          .end(function (err, res) {
-            if (err) throw err
-            Song.query.args.should.deepEqual([
-              ['where', 'id', '=', testData.model.id.toString()]
-            ])
-            res.body.should.deepEqual({
-              ...testData.model,
-              artist_id: newArtistId,
-            })
-            done()
-          })
+        const Artist = db.model('artist');
+
+        Artist.fetchById(newArtistId)
+          .then(artistModel => {
+            const artist = {
+              ...artistModel.toJSON(),
+              url: `http://127.0.0.1/artist/${newArtistId}`,
+            }
+
+            testData.request
+              .put(`/song/${testData.model.id}`)
+              .send({ artist_id: newArtistId })
+              .set('Accept', 'application/json')
+              .expect(200)
+              .expect('Content-Type', /json/)
+              .end(function (err, res) {
+                if (err) throw err
+                Song.query.args.should.deepEqual([
+                  ['where', 'id', '=', testData.model.id.toString()]
+                ])
+                res.body.should.deepEqual({
+                  ...testData.model,
+                  artist_id: newArtistId,
+                  url: `http://127.0.0.1/song/${testData.model.id}`,
+                  artist: artist,
+                })
+                done()
+              })
+          });
       })
 
       it('should reject on a duplicate name/artist_id', function (done) {
