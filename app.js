@@ -14,9 +14,9 @@ const permissions = require('./lib/permissions');
 const indexRouter = require('./routes/index');
 const artistRouter = require('./routes/artist');
 const songRouter = require('./routes/song');
+const { runInNewContext } = require('vm');
 
 const app = express();
-const port = 3000;
 
 // So far, no need for views.
 // view engine setup
@@ -64,6 +64,33 @@ passport.deserializeUser((user, done) => {
 app.use(passport.initialize());
 app.use(passport.session());
 
+app.use((req, res, next) => {
+  let { hostname, path, protocol } = req;
+  let location = '';
+  let port = app.get('port') || process.env.port || '';
+
+  if (req.header('X-Forwarded-Host')) {
+    if (hostname !== req.header('X-Forwarded-Host')) {
+      hostname = req.header('X-Forwarded-Host');
+      port = '';
+      protocol = 'https';
+
+      if (req.header('X-Forwarded-Location')) {
+        location = req.header('X-Forwarded-Location');
+      }
+    }
+  }
+  
+  port = port.length.toString() > 0 ? `:${port}` : '';
+  location = location.length > 0 ? `/${location}` : '';
+  location = location.replace(/^\/\/+/, '/');
+
+  const baseRef = `${protocol}://${hostname}${port}${location}`;
+  req.app.set('baseReference', baseRef);
+
+  next();
+});
+
 // This is used to set up a public directory of simple HTML files
 // I might need this later, but for now it's useless and potentially risky.
 // app.use(express.static(path.join(__dirname, 'public')));
@@ -71,6 +98,12 @@ app.use(passport.session());
 app.use('/', indexRouter);
 app.use('/artist', permissions.authorize(), artistRouter);
 app.use('/song', permissions.authorize(), songRouter);
+
+app.get('/login', (req, res, next) => {
+  const message = 'Attempt to use get for login';
+  console.log(message);
+  next(createError(403, message));
+});
 
 app.post('/login',
   passport.authenticate('local', {  }),

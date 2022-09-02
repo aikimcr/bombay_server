@@ -1,10 +1,39 @@
 const createError = require('http-errors');
 const express = require('express');
 const router = express.Router();
-const db = require('../lib/db')();
 
-const song = db.model('song');
+const db = require('../lib/db')();
+const dbDebug = false;
+
+const Song = db.model('song');
 const tableColumns = ['name', 'artist_id', 'key_signature', 'tempo', 'lyrics'];
+
+const routeUtils = require('../lib/routeUtils');
+
+async function normalizeModel(req, model) {
+  const Artist = db.model('artist');
+
+  const url = routeUtils.getModelUrl(req, model);
+  const artistModel = await Artist.fetchById(model.artist_id);
+
+  const artist = artistModel.toJSON();
+  artist.url = routeUtils.getModelUrl(req, artist, {baseUrl: 'artist'});
+
+  return {
+    ...model,
+    url: url,
+    artist: artist,
+  };
+}
+
+async function normalizeList(req, list) {
+  const newList = await list.map(async (model) => {
+    const newModel = await normalizeModel(req, model);
+    return newModel;
+  });
+
+  return Promise.all(newList);
+}
 
 /* Validate parameters */
 router.use((req, res, next) => {
@@ -74,41 +103,61 @@ router.get('/', (req, res, next) => {
   const offset = req.query.offset || 0;
   const limit = req.query.limit || 10;
 
-  song
+  Song
     .collection()
     .query('orderBy', 'name')
     .query('offset', offset.toString())
     .query('limit', limit.toString())
-    .fetch()
+    .fetch({debug: dbDebug})
     .then((collection) => {
-      const data = collection.toJSON();
-
-      if (data.length > 0) {
-        let body = {
-          data: data
-        }
-        if(data.length >= Number(limit)) {
-          const port = req.app.port || 3000;
-          const newOffset = `${Number(offset) + Number(limit)}`;
-          body.nextPage = `${req.protocol}://${req.hostname}:${port}${req.baseUrl}${req.path}?offset=${newOffset}&limit=${limit}`;
-        }
-        res.send(body);
+      if (collection.length > 0) {
+        const data = collection.toJSON();
+        return normalizeList(req, data)
+          .catch((err) => {
+            next(err);
+          });
       } else {
         next(createError(404));
       }
+    })
+    .then((data) => {
+      const refs = routeUtils.getPageUrls(req, data);
+
+      let body = {
+        data: data,
+        ...refs,
+      }
+      
+      res.send(body);
     });
 });
 
-/* GET an song by name */
-router.get('/:name', (req, res, next) => {
-  song
-    .query('where', 'name', '=', req.params.name)
-    .fetch()
+/* GET an song by name or id */
+router.get('/:nameorid', (req, res, next) => {
+  Song
+    .query('where', 'name', '=', req.params.nameorid)
+    .fetch({ debug: dbDebug })
     .then(model => {
-      res.send(model.toJSON());
+      return normalizeModel(req, model.toJSON());
+    })
+    .then(model => {
+      res.send(model);
     })
     .catch(err => {
-      next(createError(404));
+      if (req.params.nameorid.match(/^\d+$/)) {
+        Song.fetchById(req.params.nameorid)
+          .then(model => {
+            return normalizeModel(req, model.toJSON());
+          })
+          .then(model => {
+            res.send(model);
+          })
+          .catch(err => {
+            next(createError(404));
+          })
+      } else {
+        next(createError(404));
+      }
     });
 });
 
@@ -120,10 +169,13 @@ router.post('/', (req, res, next) => {
     saveOpts[column] = req.body[column];
   });
 
-  song.forge()
-    .save(saveOpts)
-    .then(newsong => {
-      res.send(newsong.toJSON());
+  Song.forge()
+    .save(saveOpts, { debug: dbDebug })
+    .then(newSong => {
+      return normalizeModel(req, newSong.toJSON());
+    })
+    .then(newSong => {
+      res.send(newSong);
     })
     .catch(err => {
       next(err);
@@ -140,14 +192,17 @@ router.put('/:id', (req, res, next) => {
     }
   });
 
-  song.fetchById(req.params.id)
+  Song.fetchById(req.params.id)
     .then(model => {
-      return model.save(saveOpts, {patch: true});
+      return model.save(saveOpts, {patch: true, debug: dbDebug});
     }, err => {
       return Promise.reject(createError(404));
     })
     .then(model => {
-      res.send(model.toJSON());
+      return normalizeModel(req, model.toJSON());
+    })
+    .then(model => {
+      res.send(model);
     })
     .catch(err => {
       next(err);
@@ -156,7 +211,7 @@ router.put('/:id', (req, res, next) => {
 
 /* delete an song */
 router.delete('/:id', (req, res, next) => {
-  song.fetchById(req.params.id)
+  Song.fetchById(req.params.id)
     .then(model => {
       return model.destroy();
     }, err => {
