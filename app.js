@@ -18,13 +18,10 @@ const { runInNewContext } = require('vm');
 
 const app = express();
 
-// So far, no need for views.
-// view engine setup
-// app.set('views', path.join(__dirname, 'views'));
-// app.set('view engine', 'jade');
-
-// TODO: Add support for authentication.  But that will need support
-// for https.  Which requires a certificate.  Real Soon Now.
+// Both cookieParser and expressSession need a 'secret' for
+// security.  Having the secret hardcoded this way isn't
+// really secure.  It should come from an environment or
+// runtime argument or some such.  Maybe a config.
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -33,7 +30,7 @@ app.use(expressSession({
   secret: 'Plover-Indy-Girlfriend-Dragon',
   resave: false,
   saveUninitialized: true,
-  coookie: { maxAge: 60000 }, // Should specifcy secure: true, but that requires https
+  coookie: { maxAge: 60000 }, // Should specify secure: true, but that requires https
 }));
 
 // authentication
@@ -100,9 +97,24 @@ app.use('/artist', permissions.authorize(), artistRouter);
 app.use('/song', permissions.authorize(), songRouter);
 
 app.get('/login', (req, res, next) => {
-  const message = 'Attempt to use get for login';
-  console.log(message);
-  next(createError(403, message));
+  if (req.isAuthenticated()) {
+    db.model('user').fetchById(req.user.id)
+      .then(user => {
+        res.send({
+          loggedIn: true,
+          user: {
+            id: user.get('id'),
+            name: user.get('name'),
+            full_name: user.get('full_name'),
+          }
+        });
+      })
+      .catch(err => {
+        res.send({loggedIn: false});
+      });
+  } else {
+    res.send({loggedIn: false})
+  }
 });
 
 app.post('/login',
