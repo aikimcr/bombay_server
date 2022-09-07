@@ -61,6 +61,7 @@ passport.deserializeUser((user, done) => {
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Build out a baseReference for use elseqhere
 app.use((req, res, next) => {
   let { hostname, path, protocol } = req;
   let location = '';
@@ -78,13 +79,20 @@ app.use((req, res, next) => {
     }
   }
   
-  port = port.length.toString() > 0 ? `:${port}` : '';
+  port = port.toString().length > 0 ? `:${port}` : '';
   location = location.length > 0 ? `/${location}` : '';
   location = location.replace(/^\/\/+/, '/');
 
   const baseRef = `${protocol}://${hostname}${port}${location}`;
   req.app.set('baseReference', baseRef);
 
+  next();
+});
+
+// Set up a few headers
+app.use((req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Headers', 'content-type');
   next();
 });
 
@@ -97,6 +105,7 @@ app.use('/artist', permissions.authorize(), artistRouter);
 app.use('/song', permissions.authorize(), songRouter);
 
 app.get('/login', (req, res, next) => {
+  debugger;
   if (req.isAuthenticated()) {
     db.model('user').fetchById(req.user.id)
       .then(user => {
