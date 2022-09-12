@@ -2,6 +2,7 @@ const cookieParser = require('cookie-parser');
 const createError = require('http-errors');
 const express = require('express');
 const expressSession = require('express-session');
+const cors = require('cors');
 const logger = require('morgan');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
@@ -17,6 +18,13 @@ const songRouter = require('./routes/song');
 const { runInNewContext } = require('vm');
 
 const app = express();
+
+app.use(cors({
+  origin: true,
+  methods: 'GET,POST,PUT,DELETE,OPTIONS',
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+})); // There is no real need for much security here...yet?
 
 // Both cookieParser and expressSession need a 'secret' for
 // security.  Having the secret hardcoded this way isn't
@@ -89,12 +97,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Set up a few headers
-app.use((req, res, next) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Headers', 'content-type');
-  next();
-});
+// // Set up a few headers
+// app.use((req, res, next) => {
+//   res.set('Access-Control-Allow-Origin', '*');
+//   res.set('Access-Control-Allow-Headers', 'content-type');
+//   next();
+// });
 
 // This is used to set up a public directory of simple HTML files
 // I might need this later, but for now it's useless and potentially risky.

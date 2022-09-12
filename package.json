@@ -8,14 +8,15 @@
   },
   "scripts": {
     "start": "./bin/www",
-    "start:debug": "node --inspect-brk=45.79.98.74:3001 ./bin/www",
+    "start:debug": "node --inspect-brk=127.0.0.1:3002 ./bin/www",
     "test": "mocha --require test/lib/hooks.js --reporter tap --timeout 10000",
     "test:watch": "mocha --require test/lib/hooks.js --watch --reporter tap --timeout 10000",
-    "test:debug": "mocha --inspect-brk=45.79.98.74:3001 --require test/lib/hooks.js --watch --reporter tap --timeout 10000"
+    "test:debug": "mocha --inspect-brk=127.0.0.1:3003 --require test/lib/hooks.js --watch --reporter tap --timeout 10000"
   },
   "dependencies": {
     "bookshelf": "^1.2.0",
     "cookie-parser": "^1.4.4",
+    "cors": "^2.8.5",
     "debug": "^2.6.9",
     "express": "^4.18.1",
     "express-session": "^1.17.3",
@@ -35,6 +36,7 @@
     "eslint-plugin-n": "^15.2.5",
     "eslint-plugin-promise": "^6.0.1",
     "grunt": "^1.5.3",
+    "mocha": "^10.0.0",
     "should": "^13.2.3",
     "sinon": "^14.0.0",
     "supertest": "^6.2.4"
