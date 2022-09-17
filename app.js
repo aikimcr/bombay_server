@@ -46,6 +46,7 @@ passport.use(new LocalStrategy(
   (username, password, done) => {
     db.model('user').fetchFirstByName(username)
       .then((userModel) => {
+        debugger;
         if (password === userModel.get('password')) {
           return done(null, userModel);
         } else {
@@ -53,7 +54,8 @@ passport.use(new LocalStrategy(
         }
       })
       .catch(err => {
-        return done(err);
+        debugger;
+        return done(null, false);
       });
   }
 ));
@@ -137,6 +139,7 @@ app.get('/login', (req, res, next) => {
 app.post('/login',
   passport.authenticate('local', {  }),
   (req, res, next) => {
+    debugger;
     res.sendStatus(200);
   },
 );
@@ -172,6 +175,7 @@ app.use(function(req, res, next) {
 
 // error handler
 app.use(function(err, req, res, next) {
+  debugger;
   res.status(err.status || 500).send(err.message);
 });
 
