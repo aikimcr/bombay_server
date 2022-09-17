@@ -53,7 +53,7 @@ passport.use(new LocalStrategy(
         }
       })
       .catch(err => {
-        return done(err);
+        return done(null, false);
       });
   }
 ));
@@ -113,7 +113,6 @@ app.use('/artist', permissions.authorize(), artistRouter);
 app.use('/song', permissions.authorize(), songRouter);
 
 app.get('/login', (req, res, next) => {
-  debugger;
   if (req.isAuthenticated()) {
     db.model('user').fetchById(req.user.id)
       .then(user => {
