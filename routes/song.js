@@ -117,18 +117,22 @@ router.get('/', (req, res, next) => {
             next(err);
           });
       } else {
-        next(createError(404));
+        return Promise.resolve([]);
       }
     })
     .then((data) => {
-      const refs = routeUtils.getPageUrls(req, data);
+      if (data?.length) {
+        const refs = routeUtils.getPageUrls(req, data);
 
-      let body = {
-        data: data,
-        ...refs,
+        let body = {
+          data: data,
+          ...refs,
+        }
+        
+        res.send(body);
+      } else {
+        next(createError(404));
       }
-      
-      res.send(body);
     });
 });
 

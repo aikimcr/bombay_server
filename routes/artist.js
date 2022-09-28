@@ -83,7 +83,7 @@ router.get('/', (req, res, next) => {
     .query('orderBy', 'name')
     .query('offset', offset.toString())
     .query('limit', limit.toString())
-    .fetch({debug: dbDebug})
+    .fetch({ debug: dbDebug })
     .then((collection) => {
       if (collection.length > 0) {
         const data = collection.toJSON();
@@ -92,18 +92,22 @@ router.get('/', (req, res, next) => {
             next(err);
           });
       } else {
-        next(createError(404));
+        return Promise.resolve([]);
       }
     })
     .then((data) => {
-      const refs = routeUtils.getPageUrls(req, data);
+      if (data?.length) {
+        const refs = routeUtils.getPageUrls(req, data);
 
-      let body = {
-        data: data,
-        ...refs,
+        let body = {
+          data: data,
+          ...refs,
+        }
+
+        res.send(body);
+      } else {
+        next(createError(404));
       }
-      
-      res.send(body);
     });
 });
 
@@ -119,7 +123,7 @@ router.get('/:nameorid', (req, res, next) => {
       res.send(model);
     })
     .catch(err => {
-      if(req.params.nameorid.match(/^\d+$/)) {
+      if (req.params.nameorid.match(/^\d+$/)) {
         Artist.fetchById(req.params.nameorid)
           .then(model => {
             return normalizeModel(req, model.toJSON());
@@ -138,14 +142,14 @@ router.get('/:nameorid', (req, res, next) => {
 
 /* POST a new artist. */
 router.post('/', (req, res, next) => {
-  const reqBody = {...req.body};
+  const reqBody = { ...req.body };
   delete reqBody.name;
   delete reqBody.id;
 
-  let saveOpts = {name: req.body.name};
+  let saveOpts = { name: req.body.name };
 
   Artist.forge()
-    .save(saveOpts, {method: 'insert', debug: dbDebug})
+    .save(saveOpts, { method: 'insert', debug: dbDebug })
     .then(newArtist => {
       return normalizeModel(req, newArtist.toJSON());
     })
@@ -161,7 +165,7 @@ router.post('/', (req, res, next) => {
 router.put('/:id', (req, res, next) => {
   Artist.fetchById(req.params.id)
     .then(model => {
-      return model.save({name: req.body.name}, {debug: dbDebug, patch: true});
+      return model.save({ name: req.body.name }, { debug: dbDebug, patch: true });
     }, err => {
       return Promise.reject(createError(404));
     })
@@ -206,11 +210,11 @@ router.delete('/:id', (req, res, next) => {
     });
 });
 
-router.use(function(err, req, res, next) {
+router.use(function (err, req, res, next) {
   if (!!err.status) {
     next(err, req, res, next);
   } else {
-    switch(err.code) {
+    switch (err.code) {
       case 'SQLITE_CONSTRAINT':
         const [table, column] = err.message.match(/:\s*([^:]+)$/)[1].split('.');
         next(createError(400, `${table}: duplicate ${column} '${req.body[column]}'`));
