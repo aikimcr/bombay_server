@@ -5,10 +5,8 @@ const db = require('../lib/db')();
 exports.getStrategy = function() {
     return new LocalStrategy(
         (username, password, done) => {
-            debugger;
             db.model('user').fetchFirstByName(username)
                 .then((userModel) => {
-                    debugger;
                     if (password === userModel.get('password')) {
                         return done(null, userModel);
                     } else {
@@ -16,7 +14,6 @@ exports.getStrategy = function() {
                     }
                 })
                 .catch(err => {
-                    debugger;
                     return done(null, false);
                 });
         }
