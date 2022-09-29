@@ -11,7 +11,6 @@ const db = require('./lib/db')();
 const permissions = require('./lib/permissions');
 
 const authLocal = require('./passport/localStrategy');
-const authRememberMe = require('./passport/rememberMeStrategy');
 
 const indexRouter = require('./routes/index');
 const artistRouter = require('./routes/artist');
@@ -44,15 +43,12 @@ app.use(expressSession({
 
 // authentication
 passport.use(authLocal.getStrategy());
-// passport.use(authRememberMe.getStrategy());
 
 passport.serializeUser((user, done) => {
-  debugger;
   done(null, JSON.stringify({id: user.get('id')}));
 });
 
 passport.deserializeUser((user, done) => {
-  debugger;
   done(null, JSON.parse(user));
 });
 
@@ -119,20 +115,7 @@ app.get('/login', (req, res, next) => {
 app.post('/login',
   passport.authenticate('local', {  }),
   (req, res, next) => {
-    debugger;
     res.sendStatus(200);
-    // db.model('user').fetchById(req.user.id)
-    //   .then(user => {
-    //     debugger;
-    //     authRememberMe.createSession(user)
-    //       .then(() => {
-    //         res.sendStatus(200);
-    //       });
-    //   })
-    //   .catch(err => {
-    //     debugger;
-    //     next(err);
-    //   })
   },
 );
 
@@ -167,7 +150,6 @@ app.use(function(req, res, next) {
 
 // error handler
 app.use(function(err, req, res, next) {
-  debugger;
   res.status(err.status || 500).send(err.message);
 });
 
