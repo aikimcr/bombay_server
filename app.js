@@ -5,12 +5,12 @@ const expressSession = require('express-session');
 const cors = require('cors');
 const logger = require('morgan');
 const passport = require('passport');
-const LocalStrategy = require('passport-local').Strategy;
-// const RememberMeStrategy = require('passport-remember-me').Strategy;
 const path = require('path');
 
 const db = require('./lib/db')();
 const permissions = require('./lib/permissions');
+
+const authLocal = require('./passport/localStrategy');
 
 const indexRouter = require('./routes/index');
 const artistRouter = require('./routes/artist');
@@ -42,21 +42,7 @@ app.use(expressSession({
 }));
 
 // authentication
-passport.use(new LocalStrategy(
-  (username, password, done) => {
-    db.model('user').fetchFirstByName(username)
-      .then((userModel) => {
-        if (password === userModel.get('password')) {
-          return done(null, userModel);
-        } else {
-          return done(null, false);
-        }
-      })
-      .catch(err => {
-        return done(null, false);
-      });
-  }
-));
+passport.use(authLocal.getStrategy());
 
 passport.serializeUser((user, done) => {
   done(null, JSON.stringify({id: user.get('id')}));
@@ -96,13 +82,6 @@ app.use((req, res, next) => {
 
   next();
 });
-
-// // Set up a few headers
-// app.use((req, res, next) => {
-//   res.set('Access-Control-Allow-Origin', '*');
-//   res.set('Access-Control-Allow-Headers', 'content-type');
-//   next();
-// });
 
 // This is used to set up a public directory of simple HTML files
 // I might need this later, but for now it's useless and potentially risky.

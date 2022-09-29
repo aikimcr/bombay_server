@@ -49,6 +49,15 @@ CREATE TABLE user (
   UNIQUE (name)
 );
 
+CREATE TABLE session (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_token VARCHAR,
+  session_start VARCHAR NOT NULL,
+  user_id INTEGER NOT NULL,
+  UNIQUE (session_token),
+  FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+);
+
 CREATE TABLE band_member (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   band_id INTEGER NOT NULL,
@@ -171,16 +180,6 @@ BEGIN
   DELETE FROM band_song WHERE band_id = OLD.id;
   DELETE FROM band_member WHERE band_id = OLD.id;
 END;
-
-DROP TABLE IF EXISTS session;
-CREATE TABLE session (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_token VARCHAR,
-  session_start VARCHAR NOT NULL,
-  user_id INTEGER NOT NULL,
-  UNIQUE (session_token),
-  FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
-);
 
 CREATE TABLE snapshot (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
