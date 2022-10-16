@@ -4,20 +4,22 @@ const faker = require('@faker-js/faker').faker
 require('should')
 
 // TODO: This connection boilerplate doesn't really belong here.
+// This db require must come before any other project module requires to
+// prevent corrupting the actual database.
 const db = require('../lib/db')({
   connection: ':memory:',
   pool: {
     min: 1,
     max: 1,
     disposeTimeout: 360000 * 1000,
-    idleTimeoutMillis: 360000 * 1000,
-  },
-});
+    idleTimeoutMillis: 360000 * 1000
+  }
+})
 const testDb = require('./lib/db')
 
 after(() => {
   db.knex.destroy((err) => {
-    console.log(err);
+    console.log(err)
   })
 })
 
@@ -25,38 +27,38 @@ describe('song', function () {
   const tableName = 'song'
   const Song = db.model(tableName)
 
-  let testData = null;
+  let testData = null
 
   beforeEach(function (done) {
-    const Artist = db.model('artist');
+    const Artist = db.model('artist')
 
     testDb.buildSchema()
       .then(() => {
-        return testDb.tableDefs.loadModels({artist: true, song: true})
+        return testDb.tableDefs.loadModels({ artist: true, song: true })
       })
       .then(() => {
-        return testDb.getTestData(tableName);
+        return testDb.getTestData(tableName)
       })
       .then(td => {
-        testData = td;
-        return Artist.fetchById(testData.model.artist_id);
+        testData = td
+        return Artist.fetchById(testData.model.artist_id)
       })
       .then(artist => {
         testData.artist = {
           ...artist.toJSON(),
-          url: `http://127.0.0.1/artist/${artist.get('id')}`,
-        };
+          url: `http://127.0.0.1/artist/${artist.get('id')}`
+        }
 
-        done();
+        done()
       })
       .catch((err) => {
-        done(err);
-      });
+        done(err)
+      })
   })
 
   describe('get', function () {
     describe('collection', function () {
-      function bodyExpect(queryExpect) {
+      function bodyExpect (queryExpect) {
         const query = testDb.parseQueryArgs(queryExpect)
         const queryBuilder = db.knex(tableName)
         queryExpect.forEach((arg) => {
@@ -67,28 +69,28 @@ describe('song', function () {
 
         return queryBuilder.select()
           .then((result) => {
-            const Artist = db.model('artist');
+            const Artist = db.model('artist')
 
             const artistPromises = result.map(row => {
               return Artist.fetchById(row.artist_id)
                 .then(artist => {
                   const artistJSON = {
                     ...artist.toJSON(),
-                    url: `http://127.0.0.1/artist/${artist.get('id')}`,
+                    url: `http://127.0.0.1/artist/${artist.get('id')}`
                   }
                   return Promise.resolve({
                     ...row,
                     url: `http://127.0.0.1/song/${row.id}`,
-                    artist: artistJSON,
-                  });
-                });
-              })
+                    artist: artistJSON
+                  })
+                })
+            })
 
-            return Promise.all(artistPromises);
+            return Promise.all(artistPromises)
           })
           .then(result => {
             const body = {
-              data: result,
+              data: result
             }
 
             if (body.data.length >= query.limit) {
@@ -97,8 +99,8 @@ describe('song', function () {
             }
 
             if (query.offset > 0) {
-              const newOffset = Math.max(query.offset - query.limit, 0);
-              body.prevPage = `http://127.0.0.1/song/?offset=${newOffset}&limit=${query.limit}`;
+              const newOffset = Math.max(query.offset - query.limit, 0)
+              body.prevPage = `http://127.0.0.1/song/?offset=${newOffset}&limit=${query.limit}`
             }
 
             return Promise.resolve(body)
@@ -116,6 +118,7 @@ describe('song', function () {
         testData.request
           .get('/song')
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(200)
           .expect('Content-Type', /json/)
           .end(function (err, res) {
@@ -127,7 +130,7 @@ describe('song', function () {
                 done()
               })
               .catch((err) => {
-                done(err);
+                done(err)
               })
           })
       })
@@ -143,6 +146,7 @@ describe('song', function () {
         testData.request
           .get('/song?offset=10&limit=10')
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(200)
           .expect('Content-Type', /json/)
           .end(function (err, res) {
@@ -154,7 +158,7 @@ describe('song', function () {
                 done()
               })
               .catch((err) => {
-                done(err);
+                done(err)
               })
           })
       })
@@ -170,6 +174,7 @@ describe('song', function () {
         testData.request
           .get('/song?offset=20&limit=10')
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(200)
           .expect('Content-Type', /json/)
           .end(function (err, res) {
@@ -181,7 +186,7 @@ describe('song', function () {
                 done()
               })
               .catch((err) => {
-                done(err);
+                done(err)
               })
           })
       })
@@ -197,6 +202,7 @@ describe('song', function () {
         testData.request
           .get('/song?offset=30&limit=10')
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(404)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -214,6 +220,7 @@ describe('song', function () {
         testData.request
           .get(`/song/${testData.model.name}`)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(200)
           .expect('Content-Type', /json/)
           .end(function (err, res) {
@@ -224,7 +231,7 @@ describe('song', function () {
             res.body.should.deepEqual({
               ...testData.model,
               url: `http://127.0.0.1/song/${testData.model.id}`,
-              artist: testData.artist,
+              artist: testData.artist
             })
             done()
           })
@@ -234,27 +241,29 @@ describe('song', function () {
         testData.request
           .get(`/song/${testData.model.id}`)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(200)
           .expect('Content-Type', /json/)
           .end(function (err, res) {
             if (err) throw err
             Song.query.args.should.deepEqual([
               ['where', 'name', '=', testData.model.id.toString()],
-              ['where', 'id', '=', testData.model.id.toString()],
+              ['where', 'id', '=', testData.model.id.toString()]
             ])
             res.body.should.deepEqual({
-              ...testData.model, 
+              ...testData.model,
               url: `http://127.0.0.1/song/${testData.model.id}`,
-              artist: testData.artist,
+              artist: testData.artist
             })
             done()
           })
       })
 
-     it('should return 404 if name does not exist', function (done) {
+      it('should return 404 if name does not exist', function (done) {
         testData.request
           .get(`/song/${testData.findName}`)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(404)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -273,20 +282,21 @@ describe('song', function () {
   describe('post', function () {
     describe('model', function () {
       it('should add a new record with a new id', function (done) {
-        const model = testDb.tableDefs.song.buildModel({ name: testData.newName });
-        const Artist = db.model('artist');
+        const model = testDb.tableDefs.song.buildModel({ name: testData.newName })
+        const Artist = db.model('artist')
 
         Artist.fetchById(model.artist_id)
           .then(artistModel => {
             const artist = {
               ...artistModel.toJSON(),
-              url: `http://127.0.0.1/artist/${model.artist_id}`,
+              url: `http://127.0.0.1/artist/${model.artist_id}`
             }
 
             testData.request
               .post('/song')
               .send(model)
               .set('Accept', 'application/json')
+              .set('Authorization', testData.authorizationHeader)
               .expect(200)
               .expect('Content-Type', /json/)
               .end(function (err, res) {
@@ -296,28 +306,29 @@ describe('song', function () {
                   id: testData.newId,
                   ...model,
                   url: `http://127.0.0.1/song/${testData.newId}`,
-                  artist: artist,
+                  artist
                 })
                 done()
               })
-        })
+          })
       })
 
       it('should override the specified id', function (done) {
-        const model = testDb.tableDefs.song.buildModel({ id: 1, name: testData.newName });
-        const Artist = db.model('artist');
+        const model = testDb.tableDefs.song.buildModel({ id: 1, name: testData.newName })
+        const Artist = db.model('artist')
 
         Artist.fetchById(model.artist_id)
           .then(artistModel => {
             const artist = {
               ...artistModel.toJSON(),
-              url: `http://127.0.0.1/artist/${model.artist_id}`,
+              url: `http://127.0.0.1/artist/${model.artist_id}`
             }
 
             testData.request
               .post('/song')
               .send(model)
               .set('Accept', 'application/json')
+              .set('Authorization', testData.authorizationHeader)
               .expect(200)
               .expect('Content-Type', /json/)
               .end(function (err, res) {
@@ -327,20 +338,21 @@ describe('song', function () {
                   ...model,
                   id: testData.newId,
                   url: `http://127.0.0.1/song/${testData.newId}`,
-                  artist: artist,
+                  artist
                 })
                 done()
               })
-        })
+          })
       })
 
       it('should reject on missing name', function (done) {
-        const model = testDb.tableDefs.song.buildModel({});
-        delete model.name;
+        const model = testDb.tableDefs.song.buildModel({})
+        delete model.name
         testData.request
           .post('/song')
           .send(model)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(400)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -353,12 +365,13 @@ describe('song', function () {
       })
 
       it('should reject on missing artist_id', function (done) {
-        const model = testDb.tableDefs.song.buildModel({});
-        delete model.artist_id;
+        const model = testDb.tableDefs.song.buildModel({})
+        delete model.artist_id
         testData.request
           .post('/song')
           .send(model)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(400)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -371,13 +384,14 @@ describe('song', function () {
       })
 
       it('should reject on duplicate name/artist_id', function (done) {
-        const model = testDb.tableDefs.song.buildModel({});
-        model.name = testData.duplicate.name;
-        model.artist_id = testData.duplicate.artist_id;
+        const model = testDb.tableDefs.song.buildModel({})
+        model.name = testData.duplicate.name
+        model.artist_id = testData.duplicate.artist_id
         testData.request
           .post('/song')
           .send(model)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(400)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -390,12 +404,13 @@ describe('song', function () {
       })
 
       it('should reject on invalid artist_id', function (done) {
-        const model = testDb.tableDefs.song.buildModel({});
-        model.artist_id = Math.max(...testDb.tableDefs.artist.ids) + 10;
+        const model = testDb.tableDefs.song.buildModel({})
+        model.artist_id = Math.max(...testDb.tableDefs.artist.ids) + 10
         testData.request
           .post('/song')
           .send(model)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(400)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -412,6 +427,7 @@ describe('song', function () {
           .post('/song')
           .send({ name: testData.newName, gender: 'male', age: '156' })
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(400)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -432,6 +448,7 @@ describe('song', function () {
           .put(`/song/${testData.model.id}`)
           .send({ name: testData.newName })
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(200)
           .expect('Content-Type', /json/)
           .end(function (err, res) {
@@ -443,33 +460,34 @@ describe('song', function () {
               ...testData.model,
               name: testData.newName,
               url: `http://127.0.0.1/song/${testData.model.id}`,
-              artist: testData.artist,
+              artist: testData.artist
             })
             done()
           })
       })
 
       it('should update the artist id', function (done) {
-        let newArtistId = testData.model.artist_id + 1;
-        let artistIdIdx = testDb.tableDefs.artist.ids.indexOf(newArtistId);
+        let newArtistId = testData.model.artist_id + 1
+        const artistIdIdx = testDb.tableDefs.artist.ids.indexOf(newArtistId)
 
         if (artistIdIdx === -1) {
-          newArtistId = testDb.tableDefs.artist.ids[0];
+          newArtistId = testDb.tableDefs.artist.ids[0]
         }
 
-        const Artist = db.model('artist');
+        const Artist = db.model('artist')
 
         Artist.fetchById(newArtistId)
           .then(artistModel => {
             const artist = {
               ...artistModel.toJSON(),
-              url: `http://127.0.0.1/artist/${newArtistId}`,
+              url: `http://127.0.0.1/artist/${newArtistId}`
             }
 
             testData.request
               .put(`/song/${testData.model.id}`)
               .send({ artist_id: newArtistId })
               .set('Accept', 'application/json')
+              .set('Authorization', testData.authorizationHeader)
               .expect(200)
               .expect('Content-Type', /json/)
               .end(function (err, res) {
@@ -481,11 +499,11 @@ describe('song', function () {
                   ...testData.model,
                   artist_id: newArtistId,
                   url: `http://127.0.0.1/song/${testData.model.id}`,
-                  artist: artist,
+                  artist
                 })
                 done()
               })
-          });
+          })
       })
 
       it('should reject on a duplicate name/artist_id', function (done) {
@@ -493,9 +511,10 @@ describe('song', function () {
           .put(`/song/${testData.model.id}`)
           .send({
             name: testData.duplicate.name,
-            artist_id: testData.duplicate.artist_id,
+            artist_id: testData.duplicate.artist_id
           })
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(400)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -510,11 +529,12 @@ describe('song', function () {
       })
 
       it('should reject on an invalid artist id', function (done) {
-        const newArtistId = Math.max(...testDb.tableDefs.artist.ids) + 10;
+        const newArtistId = Math.max(...testDb.tableDefs.artist.ids) + 10
         testData.request
           .put(`/song/${testData.model.id}`)
           .send({ artist_id: newArtistId })
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(400)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -531,6 +551,7 @@ describe('song', function () {
           .put(`/song/${testData.findId}`)
           .send({ name: testData.newName })
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(404)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
@@ -552,6 +573,7 @@ describe('song', function () {
         testData.request
           .delete(`/song/${testData.model.id}`)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(200)
           .expect('Content-Type', /text\/plain/)
           .end(function (err, res) {
@@ -569,6 +591,7 @@ describe('song', function () {
         testData.request
           .delete(`/song/${testData.findId}`)
           .set('Accept', 'application/json')
+          .set('Authorization', testData.authorizationHeader)
           .expect(404)
           .expect('Content-Type', /text\/html/)
           .end(function (err, res) {
