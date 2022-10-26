@@ -332,7 +332,7 @@ describe('artist', function () {
             if (err) throw err
             Artist.query.args.should.deepEqual([])
             res.body.should.deepEqual({})
-            res.text.should.equal(`artist: duplicate name '${testData.duplicate.name}'`)
+            res.text.should.match(/^Invalid request SQL UNIQUE CONSTRAINT \(\{.*\}\)$/)
             done()
           })
       })
@@ -394,7 +394,7 @@ describe('artist', function () {
               ['where', 'id', '=', testData.model.id.toString()]
             ])
             res.body.should.deepEqual({})
-            res.text.should.equal(`artist: duplicate name '${testData.duplicate.name}'`)
+            res.text.should.match(/^Invalid request SQL UNIQUE CONSTRAINT \(\{.*\}\)$/)
             done()
           })
       })

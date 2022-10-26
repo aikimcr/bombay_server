@@ -26,42 +26,10 @@ async function normalizeModel (req, model) {
   }
 }
 
-async function normalizeList (req, list) {
-  const newList = await list.map(async (model) => {
-    const newModel = await normalizeModel(req, model)
-    return newModel
-  })
-
-  return Promise.all(newList)
-}
+const normalizeList = routeUtils.normalizeList(normalizeModel);
 
 /* Validate parameters */
-router.use((req, res, next) => {
-  switch (req.method.toLowerCase()) {
-    case 'get':
-    case 'delete':
-      return next()
-
-    case 'post':
-    case 'put':
-      const reqBody = { ...req.body }
-      tableColumns.forEach((column, i) => {
-        delete reqBody[column]
-      })
-
-      delete reqBody.id
-
-      if (Object.keys(reqBody).length > 0) {
-        res.status(400).send(`Unexpected data found: '${JSON.stringify(reqBody)}'`)
-      } else {
-        return next()
-      }
-      break
-
-    default: res.status(500).send(`Unrecognized method ${req.method}`)
-  }
-})
-
+router.use(routeUtils.standardValidation(tableColumns));
 router.use((req, res, next) => {
   switch (req.method.toLowerCase()) {
     case 'get':
@@ -80,14 +48,12 @@ router.use((req, res, next) => {
     case 'put':
       // Fall through from post, or come here directly for put
       if (req.body.artist_id) {
-        const Artist = db.model('artist')
-
-        Artist.fetchById(req.body.artist_id)
-          .then((artistModel) => {
-            return next()
+        routeUtils.validateForeignKey('artist', req.body.artist_id)
+          .then(() => {
+            return next();
           })
           .catch((err) => {
-            res.status(400).send(`Invalid artist id specified: '${req.body.artist_id}'`)
+            res.status(400).send(err);
           })
       } else {
         return next()
@@ -167,12 +133,14 @@ router.get('/:nameorid', (req, res, next) => {
 
 /* POST a new song. */
 router.post('/', (req, res, next) => {
-  const saveOpts = {}
-
-  tableColumns.forEach((column) => {
-    saveOpts[column] = req.body[column]
-  })
-
+  const defaults = {
+    key_signature: '',
+    tempo: null,
+    lyrics: '',
+  }
+  const saveOpts = {...defaults, ...req.body};
+  delete saveOpts.id;
+  
   Song.forge()
     .save(saveOpts, { debug: dbDebug })
     .then(newSong => {
@@ -182,7 +150,7 @@ router.post('/', (req, res, next) => {
       res.send(newSong)
     })
     .catch(err => {
-      next(err)
+      return routeUtils.routeErrorHandler(err, req, res, next);
     })
 })
 
@@ -229,23 +197,6 @@ router.delete('/:id', (req, res, next) => {
     })
 })
 
-router.use(function (err, req, res, next) {
-  if (err.status) {
-    next(err, req, res, next)
-  } else {
-    switch (err.code) {
-      case 'SQLITE_CONSTRAINT':
-        const columns = err.message.match(/:\s*([^:]+)$/)[1].replace(/song\./g, '')
-        const columnNames = columns.split(/\s*,\s*/)
-        const values = columnNames.map((name) => {
-          return `'${req.body[name]}'`
-        }).join(', ')
-        next(createError(400, `song: duplicate ${columns} [${values}]`))
-        break
-
-      default: next(createError(400, 'Invalid request')); break
-    };
-  }
-})
+router.use(routeUtils.routeErrorHandler);
 
 module.exports = router

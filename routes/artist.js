@@ -19,42 +19,10 @@ async function normalizeModel (req, model) {
   }
 }
 
-async function normalizeList (req, list) {
-  const newList = await list.map(async (model) => {
-    const newModel = await normalizeModel(req, model)
-    return newModel
-  })
-
-  return Promise.all(newList)
-}
+const normalizeList = routeUtils.normalizeList(normalizeModel);
 
 /* Validate parameters */
-router.use((req, res, next) => {
-  switch (req.method.toLowerCase()) {
-    case 'get':
-    case 'delete':
-      return next()
-
-    case 'post':
-    case 'put':
-      const reqBody = { ...req.body }
-      tableColumns.forEach((column, i) => {
-        delete reqBody[column]
-      })
-
-      delete reqBody.id
-
-      if (Object.keys(reqBody).length > 0) {
-        res.status(400).send(`Unexpected data found: '${JSON.stringify(reqBody)}'`)
-      } else {
-        return next()
-      }
-      break
-
-    default: res.status(500).send(`Unrecognized method ${req.method}`)
-  }
-})
-
+router.use(routeUtils.standardValidation(tableColumns));
 router.use((req, res, next) => {
   switch (req.method.toLowerCase()) {
     case 'get':
@@ -142,11 +110,9 @@ router.get('/:nameorid', (req, res, next) => {
 
 /* POST a new artist. */
 router.post('/', (req, res, next) => {
-  const reqBody = { ...req.body }
-  delete reqBody.name
-  delete reqBody.id
-
-  const saveOpts = { name: req.body.name }
+  const defaults = {};
+  const saveOpts = { ...defaults, ...req.body };
+  delete saveOpts.id;
 
   Artist.forge()
     .save(saveOpts, { method: 'insert', debug: dbDebug })
@@ -210,19 +176,6 @@ router.delete('/:id', (req, res, next) => {
     })
 })
 
-router.use(function (err, req, res, next) {
-  if (err.status) {
-    next(err, req, res, next)
-  } else {
-    switch (err.code) {
-      case 'SQLITE_CONSTRAINT':
-        const [table, column] = err.message.match(/:\s*([^:]+)$/)[1].split('.')
-        next(createError(400, `${table}: duplicate ${column} '${req.body[column]}'`))
-        break
-
-      default: next(createError(400, 'Invalid request')); break
-    };
-  }
-})
+router.use(routeUtils.routeErrorHandler);
 
 module.exports = router

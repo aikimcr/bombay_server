@@ -383,6 +383,38 @@ describe('song', function () {
           })
       })
 
+      it('should fill in missing fields', function (done) {
+        const testName = faker.unique(faker.name.findName);
+
+        testDb.getTestModel('artist')
+        .then(artistModel => {
+          artistModel.url = `http://127.0.0.1/artist/${artistModel.id}`;
+
+          testData.request
+            .post('/song')
+            .send({name: testName, artist_id: artistModel.id})
+            .set('Accept', 'application/json')
+            .set('Authorization', testData.authorizationHeader)
+            .expect(200)
+            .expect('Content-Type', /json/)
+            .end(function (err, res) {
+              if (err) throw err
+              Song.query.args.should.deepEqual([])
+              res.body.should.deepEqual({
+                id: testData.newId,
+                name: testName,
+                artist_id: artistModel.id,
+                key_signature: '',
+                tempo: null,
+                lyrics: '',
+                url: `http://127.0.0.1/song/${testData.newId}`,
+                artist: artistModel,
+              })
+              done()
+            })
+        })
+      })
+
       it('should reject on duplicate name/artist_id', function (done) {
         const model = testDb.tableDefs.song.buildModel({})
         model.name = testData.duplicate.name
@@ -398,7 +430,7 @@ describe('song', function () {
             if (err) throw err
             Song.query.args.should.deepEqual([])
             res.body.should.deepEqual({})
-            res.text.should.equal(`song: duplicate name, artist_id ['${testData.duplicate.name}', '${testData.duplicate.artist_id}']`)
+            res.text.should.match(/^Invalid request SQL UNIQUE CONSTRAINT \(\{.*\}\)$/)
             done()
           })
       })
@@ -417,7 +449,7 @@ describe('song', function () {
             if (err) throw err
             Song.query.args.should.deepEqual([])
             res.body.should.deepEqual({})
-            res.text.should.equal(`Invalid artist id specified: '${model.artist_id}'`)
+            res.text.should.equal(`Invalid artist id specified: ${model.artist_id}`)
             done()
           })
       })
@@ -523,7 +555,7 @@ describe('song', function () {
               ['where', 'id', '=', testData.model.id.toString()]
             ])
             res.body.should.deepEqual({})
-            res.text.should.equal(`song: duplicate name, artist_id ['${testData.duplicate.name}', '${testData.duplicate.artist_id}']`)
+            res.text.should.match(/^Invalid request SQL UNIQUE CONSTRAINT \(\{.*\}\)$/)
             done()
           })
       })
@@ -541,7 +573,7 @@ describe('song', function () {
             if (err) throw err
             Song.query.args.should.deepEqual([])
             res.body.should.deepEqual({})
-            res.text.should.equal(`Invalid artist id specified: '${newArtistId}'`)
+            res.text.should.equal(`Invalid artist id specified: ${newArtistId}`)
             done()
           })
       })
