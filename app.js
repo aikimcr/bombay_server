@@ -20,6 +20,7 @@ const authLocal = require('./passport/localStrategy')
 const authJWT = require('./passport/JWTStrategy')
 
 const indexRouter = require('./routes/index')
+const bootstrapRouter = require('./routes/bootstrap')
 const loginRouter = require('./routes/login')
 const artistRouter = require('./routes/artist')
 const songRouter = require('./routes/song')
@@ -95,6 +96,7 @@ app.use((req, res, next) => {
 // app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter)
+app.use('/bootstrap', bootstrapRouter);
 
 app.get('/login', loginRouter.checkLogin)
 app.post('/login', loginRouter.doLogin)
