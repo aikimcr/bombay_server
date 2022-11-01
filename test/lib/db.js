@@ -290,6 +290,7 @@ exports.getTestData = async (tableName) => {
   }
 
   const app = require('../../app.js')
+  testData.app = app;
   testData.request = request(app)
 
   testData.jwtUser = await getTestModel('user', 2);

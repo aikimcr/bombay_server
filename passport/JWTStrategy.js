@@ -23,6 +23,13 @@ exports.verifySession = async function (jwt_payload) {
 
     try {
         const userModel = await db.model('user').fetchById(user_id)
+
+        const expireSeconds = userModel.get('session_expires');
+        const nowSeconds = parseInt(Date.now() / 1000); // convert from milliseconds
+
+        if (nowSeconds - expireSeconds > jwt_payload.iat) {
+            errorText = createError(401, 'Session expired');
+        }
     } catch (err) {
         // This really should not even be possible.  But paranoia pays in code.
         errorText = createError(401, 'No such user');
