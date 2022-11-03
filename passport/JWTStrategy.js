@@ -7,33 +7,18 @@ const db = require('../lib/db')()
 const jwt = require('jsonwebtoken')
 
 exports.verifySession = async function (jwtPayload) {
-    debugger
     let userId
-    let errorText
+    let errorObject
     let sessionModel
 
     try {
         sessionModel = await db.model('session').fetchByToken(jwtPayload.sub)
         userId = sessionModel.get('user_id')
     } catch (err) {
-        // debugger;
-
-        // // Debugging
-        // const sessionCollection = await db.model('session').collection().fetch()
-        //     .catch(err => { console.error(err) })
-
-        // console.log(jwtPayload.sub, sessionCollection.models)
-        // const matchingModel = sessionCollection.find(model => {
-        //     return model.get('sessions_token') === jwtPayload.sub;
-        // })
-        // // Debugging
-
-        // debugger;
-
-        errorText = createError(401, 'Session not found')
+        errorObject = createError(401, 'Session not found')
     }
 
-    if (errorText) return [errorText, false]
+    if (errorObject) return [errorObject, false]
 
     if (userId !== jwtPayload.user.id) return [createError(401, 'Session and User mismatch'), false]
 
@@ -44,53 +29,51 @@ exports.verifySession = async function (jwtPayload) {
         const nowSeconds = parseInt(Date.now() / 1000) // convert from milliseconds
 
         if (nowSeconds - expireSeconds > jwtPayload.iat) {
-            errorText = createError(401, 'Session expired')
+            errorObject = createError(401, 'Session expired')
         }
     } catch (err) {
         // This really should not even be possible.  But paranoia pays in code.
-        errorText = createError(401, 'No such user')
+        errorObject = createError(401, 'No such user')
     }
 
-    if (errorText) return [errorText, false]
+    if (errorObject) return [errorObject, false]
 
     return [null, jwtPayload.user, sessionModel]
 }
 
 exports.refreshToken = async function (req) {
     const token = exports.getToken(req)
-    if (!token) return [false, 'No Authorization Found']
+    if (!token) return [false, createError(401, 'No Authorization Found')]
 
-    let errorText
+    let sessionModel
+    let errorObject
     let newPayload
 
-    debugger
     try {
         const payload = jwt.verify(token, req.app.get('jwt_secret'));
-        [errorText] = await exports.verifySession(payload)
-        if (errorText) return [errorText, false]
+        [errorObject, , sessionModel] = await exports.verifySession(payload)
+        if (errorObject) return [errorObject, false]
         newPayload = { ...payload }
         delete newPayload.iat
     } catch (err) {
-        errorText = createError(401, 'Invalid token')
-        return [errorText, false]
+        errorObject = createError(401, 'Invalid token')
+        return [errorObject, false]
     }
 
-    debugger
     const newToken = db.model('session').generateToken()
     const sessionStart = new Date().toISOString()
 
-    db.model('session')
+    sessionModel
         .save({
             session_token: newToken,
             session_start: sessionStart
         }, { patch: true })
         .catch(err => {
-            errorText = createError(500, `Unable to update session ${err.message}`)
+            errorObject = createError(500, `Unable to update session ${err.message}`)
         })
 
-    if (errorText) return [errorText, false]
+    if (errorObject) return [errorObject, false]
 
-    debugger
     newPayload.sub = newToken
     const jwtToken = exports.makeToken(req, newPayload)
 
@@ -111,15 +94,16 @@ exports.getToken = function (req) {
 
 exports.isLoggedIn = async function (req) {
     const token = exports.getToken(req)
-    if (!token) return [false, 'No Authorization Found']
+    if (!token) return [false, createError(401, 'No Authorization Found')]
 
     try {
         const payload = jwt.verify(token, req.app.get('jwt_secret'))
-        const [err] = await exports.verifySession(payload)
-        if (err) return [false, err]
+        const [errorObject] = await exports.verifySession(payload)
+        if (errorObject) return [false, errorObject];
         return [true, token]
     } catch (err) {
-        return [false, err]
+        let message = err.name ? `${err.name}: ${err.message}` : err.message;
+        return [false, createError(401, message)]
     }
 }
 
@@ -134,6 +118,9 @@ exports.getStrategy = function (secretOrKey) {
             exports.verifySession(jwtPayload)
                 .then(([err, payload]) => {
                     done(err, payload)
+                })
+                .catch(err => {
+                    done(err, false)
                 })
         }
     )

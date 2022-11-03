@@ -1,33 +1,29 @@
 const jwt = require('jsonwebtoken')
 const passport = require('passport')
 
+const createError = require('http-errors')
+
 const db = require('../lib/db')()
 const authJWT = require('../passport/JWTStrategy')
 
 exports.checkLogin = async (req, res, next) => {
-    const [isLoggedIn, messageOrToken] = await authJWT.isLoggedIn(req)
+    const [isLoggedIn, errorOrToken] = await authJWT.isLoggedIn(req)
     const result = { loggedIn: isLoggedIn }
 
     if (isLoggedIn) {
-        result.token = messageOrToken
+        result.token = errorOrToken
     } else {
-        result.message = messageOrToken
+        result.message = errorOrToken.message
     }
 
-    res.send(result)
+    res.json(result)
 }
 
 exports.refreshToken = async (req, res, next) => {
-    const [isLoggedIn, newToken] = await authJWT.refreshToken(req)
+    const [error, newToken] = await authJWT.refreshToken(req)
 
-    if (isLoggedIn) {
-        res.send({
-            loggedIn: true,
-            token: newToken
-        })
-    } else {
-        next(createError(401, 'Not logged in'))
-    }
+    if (error) return next(error);
+    return res.json(newToken);
 }
 
 exports.doLogin = (req, res, next) => {
@@ -51,10 +47,9 @@ exports.doLogin = (req, res, next) => {
 }
 
 exports.doLogout = async (req, res, next) => {
-    const isLoggedIn = await authJWT.isLoggedIn(req)
+    const [isLoggedIn, token] = await authJWT.isLoggedIn(req)
 
     if (isLoggedIn) {
-        const token = authJWT.getToken(req)
         const decoded = jwt.decode(token, req.app.get('jwt_secret'))
 
         try {
