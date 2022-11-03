@@ -26,10 +26,10 @@ async function normalizeModel (req, model) {
   }
 }
 
-const normalizeList = routeUtils.normalizeList(normalizeModel);
+const normalizeList = routeUtils.normalizeList(normalizeModel)
 
 /* Validate parameters */
-router.use(routeUtils.standardValidation(tableColumns));
+router.use(routeUtils.standardValidation(tableColumns))
 router.use((req, res, next) => {
   switch (req.method.toLowerCase()) {
     case 'get':
@@ -50,10 +50,10 @@ router.use((req, res, next) => {
       if (req.body.artist_id) {
         routeUtils.validateForeignKey('artist', req.body.artist_id)
           .then(() => {
-            return next();
+            return next()
           })
           .catch((err) => {
-            res.status(400).send(err);
+            res.status(400).send(err)
           })
       } else {
         return next()
@@ -136,11 +136,11 @@ router.post('/', (req, res, next) => {
   const defaults = {
     key_signature: '',
     tempo: null,
-    lyrics: '',
+    lyrics: ''
   }
-  const saveOpts = {...defaults, ...req.body};
-  delete saveOpts.id;
-  
+  const saveOpts = { ...defaults, ...req.body }
+  delete saveOpts.id
+
   Song.forge()
     .save(saveOpts, { debug: dbDebug })
     .then(newSong => {
@@ -150,7 +150,7 @@ router.post('/', (req, res, next) => {
       res.send(newSong)
     })
     .catch(err => {
-      return routeUtils.routeErrorHandler(err, req, res, next);
+      return routeUtils.routeErrorHandler(err, req, res, next)
     })
 })
 
@@ -197,6 +197,6 @@ router.delete('/:id', (req, res, next) => {
     })
 })
 
-router.use(routeUtils.routeErrorHandler);
+router.use(routeUtils.routeErrorHandler)
 
 module.exports = router

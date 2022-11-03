@@ -384,35 +384,35 @@ describe('song', function () {
       })
 
       it('should fill in missing fields', function (done) {
-        const testName = faker.unique(faker.name.findName);
+        const testName = faker.unique(faker.name.findName)
 
         testDb.getTestModel('artist')
-        .then(artistModel => {
-          artistModel.url = `http://127.0.0.1/artist/${artistModel.id}`;
+          .then(artistModel => {
+            artistModel.url = `http://127.0.0.1/artist/${artistModel.id}`
 
-          testData.request
-            .post('/song')
-            .send({name: testName, artist_id: artistModel.id})
-            .set('Accept', 'application/json')
-            .set('Authorization', testData.authorizationHeader)
-            .expect(200)
-            .expect('Content-Type', /json/)
-            .end(function (err, res) {
-              if (err) throw err
-              Song.query.args.should.deepEqual([])
-              res.body.should.deepEqual({
-                id: testData.newId,
-                name: testName,
-                artist_id: artistModel.id,
-                key_signature: '',
-                tempo: null,
-                lyrics: '',
-                url: `http://127.0.0.1/song/${testData.newId}`,
-                artist: artistModel,
+            testData.request
+              .post('/song')
+              .send({ name: testName, artist_id: artistModel.id })
+              .set('Accept', 'application/json')
+              .set('Authorization', testData.authorizationHeader)
+              .expect(200)
+              .expect('Content-Type', /json/)
+              .end(function (err, res) {
+                if (err) throw err
+                Song.query.args.should.deepEqual([])
+                res.body.should.deepEqual({
+                  id: testData.newId,
+                  name: testName,
+                  artist_id: artistModel.id,
+                  key_signature: '',
+                  tempo: null,
+                  lyrics: '',
+                  url: `http://127.0.0.1/song/${testData.newId}`,
+                  artist: artistModel
+                })
+                done()
               })
-              done()
-            })
-        })
+          })
       })
 
       it('should reject on duplicate name/artist_id', function (done) {

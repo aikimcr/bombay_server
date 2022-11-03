@@ -12,7 +12,7 @@ const permissions = require('../../lib/permissions')
 const { toUnicode } = require('punycode')
 const jwt = require('jsonwebtoken')
 
-async function buildSchema() {
+async function buildSchema () {
   const schemaFile = path.normalize('./sql/schema.sql')
   const schemaBuffer = await readFile(schemaFile)
 
@@ -34,7 +34,7 @@ async function buildSchema() {
 }
 exports.buildSchema = buildSchema
 
-function parseQueryArgs(args) {
+function parseQueryArgs (args) {
   const result = {
     offset: 0,
     limit: 10,
@@ -62,7 +62,7 @@ function parseQueryArgs(args) {
 }
 exports.parseQueryArgs = parseQueryArgs
 
-function getTestModel(tableName, offset = 2) {
+function getTestModel (tableName, offset = 2) {
   return db.knex(tableName)
     .offset(offset)
     .limit(1)
@@ -77,7 +77,7 @@ function getTestModel(tableName, offset = 2) {
 }
 exports.getTestModel = getTestModel
 
-function getNextId(tableName) {
+function getNextId (tableName) {
   return db.knex(tableName)
     .max('id')
     .select()
@@ -88,7 +88,7 @@ function getNextId(tableName) {
 }
 exports.getNextId = getNextId
 
-function loadTable(tableName, capacity, modelMaker) {
+function loadTable (tableName, capacity, modelMaker) {
   const table = db.model(tableName)
   const tablePromises = []
 
@@ -116,7 +116,7 @@ exports.stubPermissions = () => {
   })
 }
 
-function stubModel(tableName, unique = []) {
+function stubModel (tableName, unique = []) {
   const table = db.model(tableName)
   const collectionName = `${tableName}Collection`
 
@@ -145,7 +145,7 @@ function stubModel(tableName, unique = []) {
 };
 
 exports.stubUser = stubModel.bind(undefined, 'user', ['name', 'full_name', 'password', 'email', 'system_admin', 'session_expires'])
-exports.stubSession = stubModel.bind(undefined, 'session', ['session_token', 'session_start', 'user_id']);
+exports.stubSession = stubModel.bind(undefined, 'session', ['session_token', 'session_start', 'user_id'])
 exports.stubArtist = stubModel.bind(undefined, 'artist', ['name'])
 exports.stubSong = stubModel.bind(undefined, 'song', ['name', 'artist_id'])
 
@@ -173,7 +173,7 @@ const tableDefs = {
     ids: [],
     buildModel: (args) => {
       const fakeName = faker.unique(faker.name.findName)
-      const fakeFull = faker.unique(faker.name.findName);
+      const fakeFull = faker.unique(faker.name.findName)
 
       return {
         name: fakeName,
@@ -188,16 +188,16 @@ const tableDefs = {
   session: {
     ids: [],
     buildModel: (args) => {
-      const nextUserId = idIterator('user');
+      const nextUserId = idIterator('user')
       const newToken = db.model('session').generateToken()
       const sessionStart = new Date().toISOString()
-      const userId = nextUserId();
+      const userId = nextUserId()
 
       return {
         session_token: newToken,
         session_start: sessionStart,
         user_id: userId,
-        ...args,
+        ...args
       }
     }
   },
@@ -255,21 +255,21 @@ tableDefs.loadModels = async (args = { artist: true }) => {
   models.user = await loadTable('user', 5, tableDefs.user.buildModel)
   tableDefs.user.ids = models.user.map(user => {
     return user.get('id')
-  });
-  exports.stubUser();
+  })
+  exports.stubUser()
 
   models.session = await loadTable('session', 5, tableDefs.session.buildModel)
   tableDefs.session.ids = models.session.map(session => {
     return session.get('id')
-  });
-  exports.stubSession();
+  })
+  exports.stubSession()
 
   return models
 }
 
 exports.tableDefs = tableDefs
 
-exports.makeJWT = function(payload) {
+exports.makeJWT = function (payload) {
   const app = require('../../app.js')
   const token = jwt.sign(payload, app.get('jwt_secret'))
   const header = `Bearer ${token}`
@@ -290,11 +290,11 @@ exports.getTestData = async (tableName) => {
   }
 
   const app = require('../../app.js')
-  testData.app = app;
+  testData.app = app
   testData.request = request(app)
 
-  testData.jwtUser = await getTestModel('user', 2);
-  testData.jwtSession = await getTestModel('session', 2);
+  testData.jwtUser = await getTestModel('user', 2)
+  testData.jwtSession = await getTestModel('session', 2)
   testData.jwtPayload = {
     sub: testData.jwtSession.session_token,
     user: {
@@ -304,7 +304,7 @@ exports.getTestData = async (tableName) => {
     }
   };
 
-  [testData.jwtToken, testData.authorizationHeader] = exports.makeJWT(testData.jwtPayload);
+  [testData.jwtToken, testData.authorizationHeader] = exports.makeJWT(testData.jwtPayload)
 
   return testData
 }

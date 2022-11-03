@@ -19,10 +19,10 @@ async function normalizeModel (req, model) {
   }
 }
 
-const normalizeList = routeUtils.normalizeList(normalizeModel);
+const normalizeList = routeUtils.normalizeList(normalizeModel)
 
 /* Validate parameters */
-router.use(routeUtils.standardValidation(tableColumns));
+router.use(routeUtils.standardValidation(tableColumns))
 router.use((req, res, next) => {
   switch (req.method.toLowerCase()) {
     case 'get':
@@ -110,9 +110,9 @@ router.get('/:nameorid', (req, res, next) => {
 
 /* POST a new artist. */
 router.post('/', (req, res, next) => {
-  const defaults = {};
-  const saveOpts = { ...defaults, ...req.body };
-  delete saveOpts.id;
+  const defaults = {}
+  const saveOpts = { ...defaults, ...req.body }
+  delete saveOpts.id
 
   Artist.forge()
     .save(saveOpts, { method: 'insert', debug: dbDebug })
@@ -176,6 +176,6 @@ router.delete('/:id', (req, res, next) => {
     })
 })
 
-router.use(routeUtils.routeErrorHandler);
+router.use(routeUtils.routeErrorHandler)
 
 module.exports = router

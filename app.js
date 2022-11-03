@@ -26,7 +26,7 @@ const artistRouter = require('./routes/artist')
 const songRouter = require('./routes/song')
 
 const app = express()
-app.set('jwt_secret', PloverSecret);
+app.set('jwt_secret', PloverSecret)
 
 app.use(cors({
   origin: true,
@@ -96,7 +96,7 @@ app.use((req, res, next) => {
 // app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter)
-app.use('/bootstrap', bootstrapRouter);
+app.use('/bootstrap', bootstrapRouter)
 
 app.get('/login', loginRouter.checkLogin)
 app.put('/login', loginRouter.refreshToken)

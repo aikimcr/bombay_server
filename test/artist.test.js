@@ -16,7 +16,7 @@ const db = require('../lib/db')({
 })
 const testDb = require('./lib/db')
 
-const permissions = require('../lib/permissions.js');
+const permissions = require('../lib/permissions.js')
 
 after(() => {
   db.knex.destroy((err) => {
@@ -49,7 +49,6 @@ describe('artist', function () {
       .catch((err) => {
         done(err)
       })
-
   })
 
   describe('get', function () {
@@ -477,7 +476,7 @@ describe('artist', function () {
               .delete(`/artist/${testData.model.id}`)
               .set('Accept', 'application/json')
               .set('Authorization', testData.authorizationHeader)
-              .expect(400) .expect('Content-Type', /text\/html/)
+              .expect(400).expect('Content-Type', /text\/html/)
               .end(function (err, res) {
                 if (err) throw err
                 Artist.query.args.should.deepEqual([
