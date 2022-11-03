@@ -61,13 +61,12 @@ exports.refreshToken = async function (req) {
     if (!token) return [false, 'No Authorization Found']
 
     let errorText
-    let sessionModel
     let newPayload
 
     debugger
     try {
         const payload = jwt.verify(token, req.app.get('jwt_secret'));
-        [errorText, user, sessionModel] = await exports.verifySession(payload)
+        [errorText] = await exports.verifySession(payload)
         if (errorText) return [errorText, false]
         newPayload = { ...payload }
         delete newPayload.iat
@@ -115,8 +114,8 @@ exports.isLoggedIn = async function (req) {
     if (!token) return [false, 'No Authorization Found']
 
     try {
-        const payload = jwt.verify(token, req.app.get('jwt_secret'));
-        [err, result] = await exports.verifySession(payload)
+        const payload = jwt.verify(token, req.app.get('jwt_secret'))
+        const [err] = await exports.verifySession(payload)
         if (err) return [false, err]
         return [true, token]
     } catch (err) {
