@@ -1,5 +1,4 @@
-const request = require('supertest')
-const faker = require('@faker-js/faker').faker
+const sinon = require('sinon')
 
 require('should')
 
@@ -17,10 +16,20 @@ const db = require('../lib/db')({
 })
 const testDb = require('./lib/db')
 
+let clock
+
 after(() => {
     db.knex.destroy((err) => {
         console.log(err)
     })
+})
+
+beforeEach(function () {
+    clock = sinon.useFakeTimers()
+})
+
+afterEach(function () {
+    clock.restore()
 })
 
 describe('login', function () {
@@ -29,8 +38,6 @@ describe('login', function () {
     let testData = null
 
     beforeEach(function (done) {
-        const Artist = db.model('artist')
-
         testDb.buildSchema()
             .then(() => {
                 return testDb.tableDefs.loadModels()
@@ -40,40 +47,44 @@ describe('login', function () {
             })
             .then(td => {
                 testData = td
-                done();
+                return testDb.getTestModel('user')
+            })
+            .then(testUser => {
+                testData.user = testUser
+                done()
             })
             .catch((err) => {
                 done(err)
             })
     })
 
-    describe('logging in', function() {
-        it('succeeds', function(done) {
+    describe('logging in', function () {
+        it('succeeds', function (done) {
             testData.request
                 .post('/login')
-                .send({username: testData.jwtUser.name, password: testData.jwtUser.password})
+                .send({ username: testData.jwtUser.name, password: testData.jwtUser.password })
                 .set('Accept', 'application/json')
                 .expect(200)
                 .expect('Content-Type', /application\/text/)
-                .end(function(err, res) {
-                    if (err) throw err;
-                    res.body.should.deepEqual({});
-                    res.text.should.equal(testData.jwtToken);
-                    done();
+                .end(function (err, res) {
+                    if (err) throw err
+                    res.body.should.deepEqual({})
+                    res.text.should.equal(testData.jwtToken)
+                    done()
                 })
         })
 
-        it('fails on bad password', function(done) {
+        it('fails on bad password', function (done) {
             testData.request
                 .post('/login')
                 .send({ username: testData.jwtUser.name, password: testData.jwtUser.password + 'yzyyz' })
                 .set('Accept', 'application/json')
                 .expect(401)
                 .end(function (err, res) {
-                    if (err) throw err;
-                    res.body.should.deepEqual({});
-                    res.text.should.equal('Username or password not recognized');
-                    done();
+                    if (err) throw err
+                    res.body.should.deepEqual({})
+                    res.text.should.equal('Username or password not recognized')
+                    done()
                 })
         })
 
@@ -84,103 +95,139 @@ describe('login', function () {
                 .set('Accept', 'application/json')
                 .expect(401)
                 .end(function (err, res) {
-                    if (err) throw err;
-                    res.body.should.deepEqual({});
-                    res.text.should.equal('Username or password not recognized');
-                    done();
+                    if (err) throw err
+                    res.body.should.deepEqual({})
+                    res.text.should.equal('Username or password not recognized')
+                    done()
                 })
         })
     })
 
     describe('checking login', function () {
-        it('should succeed', function(done) {
+        it('should succeed', function (done) {
             testData.request
-                .get(`/login`)
+                .get('/login')
                 .set('Accept', 'application/json')
                 .set('Authorization', testData.authorizationHeader)
                 .expect(200)
                 .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
-                    res.body.should.deepEqual({loggedIn: true})
-                    done();
+                    res.body.should.deepEqual({ loggedIn: true, token: testData.JWTToken })
+                    done()
                 })
         })
 
-        it('should fail without header', function(done) {
+        it('should fail without header', function (done) {
             testData.request
-                .get(`/login`)
+                .get('/login')
                 .set('Accept', 'application/json')
                 .expect(200)
                 .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
-                    res.body.should.deepEqual({loggedIn: false})
-                    done();
+                    res.body.should.deepEqual({ loggedIn: false, message: 'No Authorization Found' })
+                    done()
                 })
         })
 
-        it('should fail with bad header', function(done) {
-            const badHeader = testData.authorizationHeader.replace(/.$/, 'xx');
+        it('should fail with bad header', function (done) {
+            const badHeader = testData.authorizationHeader.replace(/.$/, 'xx')
 
             testData.request
-                .get(`/login`)
+                .get('/login')
                 .set('Accept', 'application/json')
                 .set('Authorization', badHeader)
                 .expect(200)
                 .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
-                    res.body.should.deepEqual({ loggedIn: false })
-                    done();
+                    debugger
+                    res.body.should.deepEqual({ loggedIn: false, message: '' })
+                    done()
                 })
         })
 
-        it('should fail for missing session',  function(done) {
-            const badSessionToken = db.model('session').generateToken() + 'YXZZY';
-            const [ ,badHeader] = testDb.makeJWT({
+        it('should fail for missing session', function (done) {
+            const badSessionToken = db.model('session').generateToken() + 'YXZZY'
+            const [, badHeader] = testDb.makeJWT({
                 sub: badSessionToken,
                 user: {
                 }
-            });
+            })
 
             testData.request
-                .get(`/login`)
+                .get('/login')
                 .set('Accept', 'application/json')
                 .set('Authorization', badHeader)
                 .expect(200)
                 .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
-                    res.body.should.deepEqual({ loggedIn: false })
-                    done();
+                    res.body.should.deepEqual({ loggedIn: false, message: 'Session not found' })
+                    done()
                 })
         })
-    });
 
-    describe('logging out', function() {
-        it('should logout', function(done) {
+        it('should fail on expired session', function (done) {
+            const expireTime = testData.user.session_expires * 60 * 1000 + 1000
+            clock.tick(expireTime)
+
             testData.request
-                .post(`/logout`)
+                .get('/login')
+                .set('Accept', 'application/json')
+                .set('Authorization', testData.authorizationHeader)
+                .expect(200)
+                .expect('Content-Type', /json/)
+                .end(function (err, res) {
+                    if (err) throw err
+                    res.body.should.deepEqual({ loggedIn: false, message: 'Session expired' })
+                    done()
+                })
+        })
+    })
+
+    describe('refresh token', function () {
+        it('should get a new token', function (done) {
+            debugger
+            testData.request
+                .put('/login')
+                .set('Accept', 'application/json')
+                .set('Authorization', testData.authorizationHeader)
+                .expect(200)
+                .expect('Content-Type', /json/)
+                .end(function (err, res) {
+                    if (err) throw err
+                    debugger
+                    res.body.should.deepEqual({ loggedIn: true, token: '' })
+                    done()
+                })
+        })
+    })
+
+    describe('logging out', function () {
+        it('should logout', function (done) {
+            testData.request
+                .post('/logout')
                 .send({})
                 .set('Accept', 'application/json')
                 .set('Authorization', testData.authorizationHeader)
                 .expect(200)
-                // .expect('Content-Type', /json/)
+            // .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
                     res.body.should.deepEqual({})
-                    res.text.should.equal('OK');
+                    res.text.should.equal('OK')
 
                     db.model('session').fetchByToken(testData.jwtSession.session_token)
                         .then(sessionModel => {
-                            done(new Error('Session should not exist'));
+                            done(new Error('Session should not exist'))
                         })
                         .catch(err => {
-                            done();
-                        });
+                            err.should.match(/empty response/)
+                            done()
+                        })
                 })
-
-        });
-    });
+        })
+    })
 })

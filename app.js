@@ -26,13 +26,13 @@ const artistRouter = require('./routes/artist')
 const songRouter = require('./routes/song')
 
 const app = express()
-app.set('jwt_secret', PloverSecret);
+app.set('jwt_secret', PloverSecret)
 
 app.use(cors({
-  origin: true,
-  methods: 'GET,POST,PUT,DELETE,OPTIONS',
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+    origin: true,
+    methods: 'GET,POST,PUT,DELETE,OPTIONS',
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
 })) // There is no real need for much security here...yet?
 
 app.use(logger('dev'))
@@ -47,48 +47,48 @@ passport.use(authJWT.getStrategy(app.get('jwt_secret')))
 
 // configure Express
 app.use(session({
-  secret: app.get('jwt_secret'),
-  resave: false,
-  saveUninitialized: true,
-  coookie: { maxAge: 60000 } // Should specify secure: true, but that requires https
+    secret: app.get('jwt_secret'),
+    resave: false,
+    saveUninitialized: true,
+    coookie: { maxAge: 60000 } // Should specify secure: true, but that requires https
 }))
 app.use(passport.initialize())
 app.use(passport.session())
 
 passport.serializeUser((user, done) => {
-  done(null, JSON.stringify({ id: user.get('id') }))
+    done(null, JSON.stringify({ id: user.get('id') }))
 })
 
 passport.deserializeUser((user, done) => {
-  done(null, JSON.parse(user))
+    done(null, JSON.parse(user))
 })
 
 // Build out a baseReference for use elseqhere
 app.use((req, res, next) => {
-  let { hostname, protocol } = req
-  let location = ''
-  let port = app.get('port') || process.env.port || ''
+    let { hostname, protocol } = req
+    let location = ''
+    let port = app.get('port') || process.env.port || ''
 
-  if (req.header('X-Forwarded-Host')) {
-    if (hostname !== req.header('X-Forwarded-Host')) {
-      hostname = req.header('X-Forwarded-Host')
-      port = ''
-      protocol = 'https'
+    if (req.header('X-Forwarded-Host')) {
+        if (hostname !== req.header('X-Forwarded-Host')) {
+            hostname = req.header('X-Forwarded-Host')
+            port = ''
+            protocol = 'https'
 
-      if (req.header('X-Forwarded-Location')) {
-        location = req.header('X-Forwarded-Location')
-      }
+            if (req.header('X-Forwarded-Location')) {
+                location = req.header('X-Forwarded-Location')
+            }
+        }
     }
-  }
 
-  port = port.toString().length > 0 ? `:${port}` : ''
-  location = location.length > 0 ? `/${location}` : ''
-  location = location.replace(/^\/\/+/, '/')
+    port = port.toString().length > 0 ? `:${port}` : ''
+    location = location.length > 0 ? `/${location}` : ''
+    location = location.replace(/^\/\/+/, '/')
 
-  const baseRef = `${protocol}://${hostname}${port}${location}`
-  req.app.set('baseReference', baseRef)
+    const baseRef = `${protocol}://${hostname}${port}${location}`
+    req.app.set('baseReference', baseRef)
 
-  next()
+    next()
 })
 
 // This is used to set up a public directory of simple HTML files
@@ -96,9 +96,10 @@ app.use((req, res, next) => {
 // app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter)
-app.use('/bootstrap', bootstrapRouter);
+app.use('/bootstrap', bootstrapRouter)
 
 app.get('/login', loginRouter.checkLogin)
+app.put('/login', loginRouter.refreshToken)
 app.post('/login', loginRouter.doLogin)
 app.post('/logout', loginRouter.doLogout)
 
@@ -109,27 +110,27 @@ app.use('/artist', permissions.authorize(), artistRouter)
 app.use('/song', permissions.authorize(), songRouter)
 
 app.use('/json', function (req, res, next) {
-  // Getting multiple request to '/json' for some reason.
-  // I suspect it's an attack of some sort, so I'm going to
-  // make it expensive for them.
-  new Promise((resolve, reject) => {
-    setTimeout(() => {
-      resolve()
-    }, 300000)
-  }).then(() => {
-    res.status(500)
-    res.send('Nothing to see here.  Go away')
-  })
+    // Getting multiple request to '/json' for some reason.
+    // I suspect it's an attack of some sort, so I'm going to
+    // make it expensive for them.
+    new Promise((resolve, reject) => {
+        setTimeout(() => {
+            resolve()
+        }, 300000)
+    }).then(() => {
+        res.status(500)
+        res.send('Nothing to see here.  Go away')
+    })
 })
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
-  next(createError(404))
+    next(createError(404))
 })
 
 // error handler
 app.use(function (err, req, res, next) {
-  res.status(err.status || 500).send(err.message)
+    res.status(err.status || 500).send(err.message)
 })
 
 module.exports = app
