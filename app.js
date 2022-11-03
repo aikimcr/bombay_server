@@ -99,6 +99,7 @@ app.use('/', indexRouter)
 app.use('/bootstrap', bootstrapRouter);
 
 app.get('/login', loginRouter.checkLogin)
+app.put('/login', loginRouter.refreshToken)
 app.post('/login', loginRouter.doLogin)
 app.post('/logout', loginRouter.doLogout)
 

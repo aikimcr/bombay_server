@@ -1,4 +1,5 @@
 const should = require('should')
+const sinon = require('sinon')
 
 // This db require must come before any other project module requires to
 // prevent corrupting the actual database.
@@ -23,33 +24,42 @@ after(() => {
     })
 })
 
-describe('JWT Strategey', function() {
-    let testData = null
+let clock;
+beforeEach(function () {
+    clock = sinon.useFakeTimers();
+})
 
+afterEach(function () {
+    clock.restore();
+})
+
+describe('JWT Strategy', function() {
+    let testData = null
+    
     beforeEach(function (done) {
         testDb.buildSchema()
-            .then(() => {
-                return testDb.tableDefs.loadModels()
-            })
-            .then(() => {
-                return testDb.getTestData()
-            })
-            .then((td) => {
-                testData = td
-                return testDb.getTestModel('user')
-            })
-            .then(testUser => {
-                testData.user = testUser
-                done()
-            })
-            .catch((err) => {
-                done(err)
-            })
-
-    })
-
+        .then(() => {
+            return testDb.tableDefs.loadModels()
+        })    
+        .then(() => {
+            return testDb.getTestData()
+        })    
+        .then((td) => {
+            testData = td
+            return testDb.getTestModel('user')
+        })    
+        .then(testUser => {
+            testData.user = testUser
+            done()
+        })    
+        .catch((err) => {
+            done(err)
+        })    
+        
+    })    
+    
     describe('verifySession', function () {
-        it('should verify the session', async function() {
+       it('should verify the session', async function() {
             const token = jwt.sign(testData.jwtPayload, testData.app.get('jwt_secret'))
             const decoded = jwt.decode(token);
             const [err, user] = await authJWT.verifySession(decoded);
@@ -79,9 +89,21 @@ describe('JWT Strategey', function() {
             const token = jwt.sign(testData.jwtPayload, testData.app.get('jwt_secret'))
             const decoded = jwt.decode(token);
 
-            // Convert number of minutes from user to seconds and subtract from iat
-            decoded.iat = decoded.iat - testData.user.session_expires * 60;
-            const [err, user] = await authJWT.verifySession(decoded);
+            // Convert number of minutes from user to milliseconds
+            const expireTime = testData.user.session_expires * 60 * 1000;
+
+            let [err, user] = await authJWT.verifySession(decoded);
+            should(err).be.exactly(null);
+            user.should.deepEqual(testData.jwtPayload.user);
+
+            clock.tick(expireTime / 2);
+            [err, user] = await authJWT.verifySession(decoded);
+            should(err).be.exactly(null);
+            user.should.deepEqual(testData.jwtPayload.user);
+
+            clock.tick(expireTime / 2);
+            clock.tick(1000); // Fudge it past the threshold
+            [err, user] = await authJWT.verifySession(decoded);
             err.should.match(/Session expired/);
             user.should.be.false();
         });

@@ -7,13 +7,29 @@ const db = require('../lib/db')()
 const jwt = require('jsonwebtoken')
 
 exports.verifySession = async function (jwt_payload) {
+    debugger;
     let user_id;
     let errorText;
+    let sessionModel;
 
     try {
-        const sessionModel = await db.model('session').fetchByToken(jwt_payload.sub)
+        sessionModel = await db.model('session').fetchByToken(jwt_payload.sub)
         user_id = sessionModel.get('user_id');
     } catch (err) {
+        // debugger;
+
+        // // Debugging
+        // const sessionCollection = await db.model('session').collection().fetch()
+        //     .catch(err => { console.error(err) })
+
+        // console.log(jwt_payload.sub, sessionCollection.models)
+        // const matchingModel = sessionCollection.find(model => {
+        //     return model.get('sessions_token') === jwt_payload.sub;
+        // })
+        // // Debugging
+
+        // debugger;
+
         errorText = createError(401, 'Session not found');
     }
 
@@ -24,7 +40,7 @@ exports.verifySession = async function (jwt_payload) {
     try {
         const userModel = await db.model('user').fetchById(user_id)
 
-        const expireSeconds = userModel.get('session_expires');
+        const expireSeconds = userModel.get('session_expires') * 60;
         const nowSeconds = parseInt(Date.now() / 1000); // convert from milliseconds
 
         if (nowSeconds - expireSeconds > jwt_payload.iat) {
@@ -37,7 +53,51 @@ exports.verifySession = async function (jwt_payload) {
 
     if (errorText) return [errorText, false];
 
-    return [null, jwt_payload.user];
+    return [null, jwt_payload.user, sessionModel];
+}
+
+exports.refreshToken = async function (req) {
+    let errorText
+    let sessionModel
+    let newPayload
+
+    debugger;
+    try {
+        let user;
+        const payload = jwt.verify(token, req.app.get('jwt_secret'));
+        [errorText, user, sessionModel] = await exports.verifySession(payload)
+        if (errorText) return [errorText, false]
+        newPayload = {...payload};
+        delete newPayload.iat;
+    } catch (err) {
+        errorText = createError(401, 'Invalid token');
+        return [errorText, false];
+    }
+
+    debugger;
+    const newToken = db.model('session').generateToken()
+    const sessionStart = new Date().toISOString();
+
+    db.model('session')
+        .save({
+            session_token: newToken,
+            session_start: sessionStart,
+        }, { patch: true })
+        .catch(err => {
+            errorText = createError(500, `Unable to update session ${err.message}`);
+        })
+    
+    if (errorText) return [errorText, false];
+
+    debugger;
+    newPayload.sub = newToken;
+    const jwtToken = exports.makeToken(req, newPayload);
+
+    return [null, jwtToken];
+}
+
+exports.makeToken = function(req, payload) {
+     return jwt.sign(payload, req.app.get('jwt_secret'))
 }
 
 exports.getToken = function(req) {
@@ -50,15 +110,15 @@ exports.getToken = function(req) {
 
 exports.isLoggedIn = async function (req) {
     token = exports.getToken(req)
-    if (!token) return false
+    if (!token) return [false, 'No Authorization Found']
 
     try {
         const payload = jwt.verify(token, req.app.get('jwt_secret'));
         [err, result] = await exports.verifySession(payload)
-        if (err) return false;
-        return true
+        if (err) return [false, err];
+        return [true, token]
     } catch (err) {
-        return false
+        return [false, err]
     }
 }
 

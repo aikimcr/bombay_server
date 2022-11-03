@@ -1,5 +1,5 @@
 const request = require('supertest')
-const faker = require('@faker-js/faker').faker
+const sinon = require('sinon')
 
 require('should')
 
@@ -17,10 +17,20 @@ const db = require('../lib/db')({
 })
 const testDb = require('./lib/db')
 
+let clock;
+
 after(() => {
     db.knex.destroy((err) => {
         console.log(err)
     })
+})
+
+beforeEach(function () {
+    clock = sinon.useFakeTimers();
+})
+
+afterEach(function () {
+    clock.restore();
 })
 
 describe('login', function () {
@@ -34,18 +44,22 @@ describe('login', function () {
         testDb.buildSchema()
             .then(() => {
                 return testDb.tableDefs.loadModels()
-            })
+            })    
             .then(() => {
                 return testDb.getTestData(tableName)
-            })
+            })    
             .then(td => {
                 testData = td
+                return testDb.getTestModel('user')
+            })    
+            .then(testUser => {
+                testData.user = testUser
                 done();
-            })
+            })    
             .catch((err) => {
                 done(err)
-            })
-    })
+            })    
+    })        
 
     describe('logging in', function() {
         it('succeeds', function(done) {
@@ -60,8 +74,8 @@ describe('login', function () {
                     res.body.should.deepEqual({});
                     res.text.should.equal(testData.jwtToken);
                     done();
-                })
-        })
+                })    
+        })        
 
         it('fails on bad password', function(done) {
             testData.request
@@ -74,8 +88,8 @@ describe('login', function () {
                     res.body.should.deepEqual({});
                     res.text.should.equal('Username or password not recognized');
                     done();
-                })
-        })
+                })    
+        })        
 
         it('fails on bad username', function (done) {
             testData.request
@@ -88,9 +102,9 @@ describe('login', function () {
                     res.body.should.deepEqual({});
                     res.text.should.equal('Username or password not recognized');
                     done();
-                })
-        })
-    })
+                })    
+        })        
+    })    
 
     describe('checking login', function () {
         it('should succeed', function(done) {
@@ -102,7 +116,7 @@ describe('login', function () {
                 .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
-                    res.body.should.deepEqual({loggedIn: true})
+                    res.body.should.deepEqual({loggedIn: true, token: testData.JWTToken})
                     done();
                 })
         })
@@ -115,7 +129,7 @@ describe('login', function () {
                 .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
-                    res.body.should.deepEqual({loggedIn: false})
+                    res.body.should.deepEqual({loggedIn: false, message: 'No Authorization Found'})
                     done();
                 })
         })
@@ -131,7 +145,8 @@ describe('login', function () {
                 .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
-                    res.body.should.deepEqual({ loggedIn: false })
+                    debugger;
+                    res.body.should.deepEqual({ loggedIn: false, message: '' })
                     done();
                 })
         })
@@ -152,10 +167,46 @@ describe('login', function () {
                 .expect('Content-Type', /json/)
                 .end(function (err, res) {
                     if (err) throw err
-                    res.body.should.deepEqual({ loggedIn: false })
+                    res.body.should.deepEqual({ loggedIn: false, message: 'Session not found' })
                     done();
                 })
         })
+
+        it('should fail on expired session', function(done) {
+            const expireTime = testData.user.session_expires * 60 * 1000 + 1000;
+            clock.tick(expireTime);
+
+            testData.request
+                .get(`/login`)
+                .set('Accept', 'application/json')
+                .set('Authorization', testData.authorizationHeader)
+                .expect(200)
+                .expect('Content-Type', /json/)
+                .end(function (err, res) {
+                    if (err) throw err
+                    res.body.should.deepEqual({ loggedIn: false, message: 'Session expired' })
+                    done();
+                })
+        });
+    });
+
+    describe('refresh token', function() {
+        it('should get a new token', function (done) {
+            debugger;
+            testData.request
+                .put(`/login`)
+                .set('Accept', 'application/json')
+                .set('Authorization', testData.authorizationHeader)
+                .expect(200)
+                .expect('Content-Type', /json/)
+                .end(function (err, res) {
+                    if (err) throw err
+                    debugger;
+                    res.body.should.deepEqual({ loggedIn: true, token: '' })
+                    done();
+                })
+        })
+
     });
 
     describe('logging out', function() {
