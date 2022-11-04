@@ -43,7 +43,7 @@ exports.verifySession = async function (jwtPayload) {
 
 exports.refreshToken = async function (req) {
     const token = exports.getToken(req)
-    if (!token) return [false, createError(401, 'No Authorization Found')]
+    if (!token) return [createError(401, 'No Authorization Found'), false]
 
     let sessionModel
     let errorObject
@@ -92,6 +92,9 @@ exports.getToken = function (req) {
     return authHeader.replace(/^Bearer\s+/, '')
 }
 
+// This returns the logged in status first, error or token last.  This is 
+// different from other places.  The semantics of this one are different as well, 
+// but there needs to be some normalization here.
 exports.isLoggedIn = async function (req) {
     const token = exports.getToken(req)
     if (!token) return [false, createError(401, 'No Authorization Found')]

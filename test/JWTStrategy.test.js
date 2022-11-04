@@ -102,6 +102,86 @@ describe('JWT Strategy', function () {
         })
     })
 
+    describe('isLoggedIn', function () {
+        let clock;
+        const sandbox = sinon.createSandbox()
+
+        beforeEach(function () {
+            clock = sinon.useFakeTimers();
+            sandbox.spy(authJWT, 'makeToken')
+
+            // Need to add a few things to the request because we're not going through a route.
+            testData.request.app = testData.app
+            testData.request.header = (headerName) => {
+                return testData.request._headers[headerName]
+            }
+            testData.request._headers = {}
+        });
+
+        afterEach(function () {
+            clock.restore();
+            sandbox.restore();
+        });
+
+        it('should return true', async function () {
+            testData.request._headers.Authorization = testData.authorizationHeader
+            const [status, newToken] = await authJWT.isLoggedIn(testData.request)
+            status.should.be.true();
+            newToken.should.equal(testData.jwtToken);
+        });
+
+        it('should fail on mismatched user id', async function () {
+            const badId = testData.jwtPayload.user.id + 10
+            const badUser = { ...testData.jwtPayload.user, id: badId }
+            const token = jwt.sign({ ...testData.jwtPayload, user: badUser }, testData.app.get('jwt_secret'))
+            testData.request._headers.Authorization = `Bearer ${token}`
+            const [status, error] = await authJWT.isLoggedIn(testData.request)
+            status.should.be.false()
+            error.should.match(/Session and User mismatch/)
+        })
+
+        it('should fail on no session', async function () {
+            const token = jwt.sign({ ...testData.jwtPayload, sub: 'xyzzy not here' }, testData.app.get('jwt_secret'))
+            testData.request._headers.Authorization = `Bearer ${token}`
+            const [status, error] = await authJWT.isLoggedIn(testData.request)
+            status.should.be.false()
+            error.should.match(/Session not found/)
+        })
+
+        it('should fail on no token', async function () {
+            const [status, error] = await authJWT.isLoggedIn(testData.request)
+            status.should.be.false()
+            error.should.match(/No Authorization Found/)
+        })
+
+        it('should fail on expired session', async function () {
+            const token = jwt.sign(testData.jwtPayload, testData.app.get('jwt_secret'))
+            testData.request._headers.Authorization = `Bearer ${token}`
+
+            // Convert number of minutes from user to milliseconds
+            const expireTime = testData.user.session_expires * 60 * 1000
+
+            let [status, errorOrToken] = await authJWT.isLoggedIn(testData.request)
+            status.should.be.true();
+            errorOrToken.should.equal(token);
+            testData.request._headers.Authorization = `Bearer ${errorOrToken}`
+
+            clock.tick(expireTime / 2);
+            [status, errorOrToken] = await authJWT.isLoggedIn(testData.request)
+            status.should.be.true();
+            errorOrToken.should.equal(token);
+            testData.request._headers.Authorization = `Bearer ${errorOrToken}`
+
+            // The iat is updated along with the token, so use the full expire time.
+            // NOTE: This is *different* verifySession
+            clock.tick(expireTime)
+            clock.tick(1000); // Fudge it past the threshold
+            [status, errorOrToken] = await authJWT.isLoggedIn(testData.request)
+            status.should.be.false();
+            errorOrToken.should.match(/Session expired/)
+        })
+    })
+
     describe('refreshToken', function () {
         let clock;
         const sandbox = sinon.createSandbox()
@@ -145,6 +225,12 @@ describe('JWT Strategy', function () {
             testData.request._headers.Authorization = `Bearer ${token}`
             const [err, newToken] = await authJWT.refreshToken(testData.request)
             err.should.match(/Session not found/)
+            newToken.should.be.false()
+        })
+
+        it('should fail on no token', async function () {
+            const [err, newToken] = await authJWT.refreshToken(testData.request)
+            err.should.match(/No Authorization Found/)
             newToken.should.be.false()
         })
 
