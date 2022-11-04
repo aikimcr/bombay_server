@@ -9,9 +9,9 @@
   "scripts": {
     "start": "./bin/www",
     "start:debug": "node --inspect-brk=127.0.0.1:3002 ./bin/www",
-    "test": "mocha --require test/lib/hooks.js --reporter tap --timeout 1000",
-    "test:watch": "mocha --require test/lib/hooks.js --watch --reporter tap --timeout 1000",
-    "test:debug": "mocha --inspect-brk=127.0.0.1:3003 --require test/lib/hooks.js --watch --reporter tap --timeout 10000",
+    "test": "mocha --require test/lib/hooks.js --reporter min",
+    "test:watch": "mocha --require test/lib/hooks.js --watch --reporter min",
+    "test:debug": "mocha --inspect-brk=127.0.0.1:3003 --require test/lib/hooks.js --watch --reporter min --timeout 10000",
     "eslint": "eslint `pwd`"
   },
   "dependencies": {
