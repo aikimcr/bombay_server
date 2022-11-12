@@ -1,39 +1,35 @@
-const LocalStrategy = require('passport-local').Strategy
+const LocalStrategy = require('passport-local').Strategy;
 
-const createError = require('http-errors')
+const createError = require('http-errors');
 
-const db = require('../lib/db')()
+const db = require('../lib/db')();
 
 exports.getStrategy = function () {
     return new LocalStrategy(
         (username, password, done) => {
-            const invalidCredentialsMessage = 'Username or password not recognized'
+            const invalidCredentialsMessage = 'Username or password not recognized';
 
             db.model('user').fetchFirstByName(username)
                 .then((userModel) => {
                     if (password === userModel.get('password')) {
-                        const newToken = db.model('session').generateToken()
-                        const sessionStart = new Date().toISOString()
+                        const newToken = db.model('session').generateToken();
+                        const sessionStart = new Date().toISOString();
 
                         db.model('session')
                             .query('where', 'user_id', '=', userModel.get('id'))
                             .fetch()
                             .then(sessionModel => {
-                                // return sessionModel.save({
-                                //   session_token: newToken,
-                                //   session_start: sessionStart
-                                // }, { patch: true })
-                                return sessionModel
-                            }, err => {
+                                return sessionModel;
+                            }, () => {
                                 const saveOpts = {
                                     session_token: newToken,
                                     session_start: sessionStart,
                                     user_id: userModel.get('id')
-                                }
+                                };
 
                                 return db.model('session')
                                     .forge()
-                                    .save(saveOpts, { method: 'insert' })
+                                    .save(saveOpts, { method: 'insert' });
                             })
                             .then(sessionModel => {
                                 return done(null, {
@@ -43,18 +39,18 @@ exports.getStrategy = function () {
                                         name: userModel.get('name'),
                                         admin: !!userModel.get('system_admin')
                                     }
-                                })
+                                });
                             })
                             .catch(err => {
-                                return done(err, false)
-                            })
+                                return done(err, false);
+                            });
                     } else {
-                        return done(createError(401, invalidCredentialsMessage), false)
+                        return done(createError(401, invalidCredentialsMessage), false);
                     }
                 })
-                .catch(err => {
-                    return done(createError(401, invalidCredentialsMessage), false)
-                })
+                .catch(() => {
+                    return done(createError(401, invalidCredentialsMessage), false);
+                });
         }
-    )
-}
+    );
+};
