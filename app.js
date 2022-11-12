@@ -1,7 +1,6 @@
 const cookieParser = require('cookie-parser');
 const createError = require('http-errors');
 const express = require('express');
-const session = require('express-session');
 const cors = require('cors');
 const logger = require('morgan'); // I really don't know if I want this.
 const passport = require('passport');
@@ -45,22 +44,7 @@ passport.use(authLocal.getStrategy());
 passport.use(authJWT.getStrategy(app.get('jwt_secret')));
 
 // configure Express
-app.use(session({
-    secret: app.get('jwt_secret'),
-    resave: false,
-    saveUninitialized: true,
-    coookie: { maxAge: 60000 } // Should specify secure: true, but that requires https
-}));
 app.use(passport.initialize());
-app.use(passport.session());
-
-passport.serializeUser((user, done) => {
-    done(null, JSON.stringify({ id: user.get('id') }));
-});
-
-passport.deserializeUser((user, done) => {
-    done(null, JSON.parse(user));
-});
 
 // Build out a baseReference for use elseqhere
 app.use((req, res, next) => {
