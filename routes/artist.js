@@ -1,50 +1,50 @@
-const createError = require('http-errors')
-const express = require('express')
-const router = express.Router()
+const createError = require('http-errors');
+const express = require('express');
+const router = express.Router();
 
-const db = require('../lib/db')()
-const dbDebug = false
+const db = require('../lib/db')();
+const dbDebug = false;
 
-const Artist = db.model('artist')
-const tableColumns = ['name']
+const Artist = db.model('artist');
+const tableColumns = ['name'];
 
-const routeUtils = require('../lib/routeUtils')
+const routeUtils = require('../lib/routeUtils');
 
 async function normalizeModel (req, model) {
-    const url = routeUtils.getModelUrl(req, model)
+    const url = routeUtils.getModelUrl(req, model);
 
     return {
         ...model,
         url
-    }
+    };
 }
 
-const normalizeList = routeUtils.normalizeList(normalizeModel)
+const normalizeList = routeUtils.normalizeList(normalizeModel);
 
 /* Validate parameters */
-router.use(routeUtils.standardValidation(tableColumns))
+router.use(routeUtils.standardValidation(tableColumns));
 router.use((req, res, next) => {
     switch (req.method.toLowerCase()) {
     case 'get':
     case 'delete':
-        return next()
+        return next();
 
     case 'post':
     case 'put':
         if (!req.body.name) {
-            res.status(400).send('Name must be specified')
-            break // Don't fall through if there's an error
+            res.status(400).send('Name must be specified');
+            break; // Don't fall through if there's an error
         }
-        return next()
+        return next();
 
-    default: res.status(500).send(`Unrecognized method ${req.method}`)
+    default: res.status(500).send(`Unrecognized method ${req.method}`);
     }
-})
+});
 
 /* GET artist listing. */
 router.get('/', (req, res, next) => {
-    const offset = req.query.offset || 0
-    const limit = req.query.limit || 10
+    const offset = req.query.offset || 0;
+    const limit = req.query.limit || 10;
 
     Artist
         .collection()
@@ -54,30 +54,30 @@ router.get('/', (req, res, next) => {
         .fetch({ debug: dbDebug })
         .then((collection) => {
             if (collection.length > 0) {
-                const data = collection.toJSON()
+                const data = collection.toJSON();
                 return normalizeList(req, data)
                     .catch((err) => {
-                        next(err)
-                    })
+                        next(err);
+                    });
             } else {
-                return Promise.resolve([])
+                return Promise.resolve([]);
             }
         })
         .then((data) => {
             if (data?.length) {
-                const refs = routeUtils.getPageUrls(req, data)
+                const refs = routeUtils.getPageUrls(req, data);
 
                 const body = {
                     data,
                     ...refs
-                }
+                };
 
-                res.send(body)
+                res.send(body);
             } else {
-                next(createError(404))
+                next(createError(404));
             }
-        })
-})
+        });
+});
 
 /* GET an artist by name */
 router.get('/:nameorid', (req, res, next) => {
@@ -85,72 +85,72 @@ router.get('/:nameorid', (req, res, next) => {
         .query('where', 'name', '=', req.params.nameorid)
         .fetch({ debug: dbDebug })
         .then(model => {
-            return normalizeModel(req, model.toJSON())
+            return normalizeModel(req, model.toJSON());
         })
         .then((model) => {
-            res.send(model)
+            res.send(model);
         })
-        .catch(err => {
+        .catch(() => {
             if (req.params.nameorid.match(/^\d+$/)) {
                 Artist.fetchById(req.params.nameorid)
                     .then(model => {
-                        return normalizeModel(req, model.toJSON())
+                        return normalizeModel(req, model.toJSON());
                     })
                     .then((model) => {
-                        res.send(model)
+                        res.send(model);
                     })
-                    .catch(err => {
-                        next(createError(404))
-                    })
+                    .catch(() => {
+                        next(createError(404));
+                    });
             } else {
-                next(createError(404))
+                next(createError(404));
             }
-        })
-})
+        });
+});
 
 /* POST a new artist. */
 router.post('/', (req, res, next) => {
-    const defaults = {}
-    const saveOpts = { ...defaults, ...req.body }
-    delete saveOpts.id
+    const defaults = {};
+    const saveOpts = { ...defaults, ...req.body };
+    delete saveOpts.id;
 
     Artist.forge()
         .save(saveOpts, { method: 'insert', debug: dbDebug })
         .then(newArtist => {
-            return normalizeModel(req, newArtist.toJSON())
+            return normalizeModel(req, newArtist.toJSON());
         })
         .then(newArtist => {
-            res.send(newArtist)
+            res.send(newArtist);
         })
         .catch(err => {
-            next(err)
-        })
-})
+            next(err);
+        });
+});
 
 /* update an artist */
 router.put('/:id', (req, res, next) => {
     Artist.fetchById(req.params.id)
         .then(model => {
-            return model.save({ name: req.body.name }, { debug: dbDebug, patch: true })
-        }, err => {
-            return Promise.reject(createError(404))
+            return model.save({ name: req.body.name }, { debug: dbDebug, patch: true });
+        }, () => {
+            return Promise.reject(createError(404));
         })
         .then(model => {
-            return normalizeModel(req, model.toJSON())
+            return normalizeModel(req, model.toJSON());
         })
         .then(model => {
-            res.send(model)
+            res.send(model);
         })
         .catch(err => {
-            next(err)
-        })
-})
+            next(err);
+        });
+});
 
 /* delete an artist */
 router.delete('/:id', (req, res, next) => {
     Artist.fetchById(req.params.id)
         .then(model => {
-            const Song = db.model('song')
+            const Song = db.model('song');
 
             return Song
                 .collection()
@@ -158,24 +158,24 @@ router.delete('/:id', (req, res, next) => {
                 .count('id')
                 .then((songCount) => {
                     if (songCount === 0) {
-                        return model.destroy({ debug: dbDebug })
+                        return model.destroy({ debug: dbDebug });
                     } else if (songCount === 1) {
-                        return Promise.reject(createError(400, 'Attempt to delete artist with one reference'))
+                        return Promise.reject(createError(400, 'Attempt to delete artist with one reference'));
                     } else {
-                        return Promise.reject(createError(400, `Attempt to delete artist with ${songCount} references`))
+                        return Promise.reject(createError(400, `Attempt to delete artist with ${songCount} references`));
                     }
-                })
-        }, err => {
-            return Promise.reject(createError(404))
+                });
+        }, () => {
+            return Promise.reject(createError(404));
         })
         .then(model => {
-            res.sendStatus(200)
+            res.sendStatus(200);
         })
         .catch(err => {
-            next(err)
-        })
-})
+            next(err);
+        });
+});
 
-router.use(routeUtils.routeErrorHandler)
+router.use(routeUtils.routeErrorHandler);
 
-module.exports = router
+module.exports = router;

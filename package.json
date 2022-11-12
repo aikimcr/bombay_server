@@ -12,7 +12,8 @@
     "test": "mocha --require test/lib/hooks.js --reporter min",
     "test:watch": "mocha --require test/lib/hooks.js --watch --reporter min",
     "test:debug": "mocha --inspect-brk=127.0.0.1:3003 --require test/lib/hooks.js --watch --reporter min --timeout 10000",
-    "eslint": "eslint `pwd`"
+    "eslint": "eslint `pwd`",
+    "eslint:fix": "eslint --fix `pwd`"
   },
   "dependencies": {
     "bookshelf": "^1.2.0",

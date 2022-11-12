@@ -1,0 +1,4 @@
+#!/bin/sh
+
+cd git-hooks
+tar -cf - check-forbidden.pl pre-commit | tar -xvf - -C ../.git/hooks
