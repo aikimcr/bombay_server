@@ -23,7 +23,8 @@ exports.refreshToken = async (req, res, next) => {
     const [error, newToken] = await authJWT.refreshToken(req);
 
     if (error) return next(error);
-    return res.json(newToken);
+    res.setHeader('Content-Type', 'text/plain');
+    return res.send(newToken);
 };
 
 exports.doLogin = (req, res, next) => {
@@ -40,7 +41,7 @@ exports.doLogin = (req, res, next) => {
             if (err) return next(err);
 
             const token = authJWT.makeToken(req, payload);
-            res.setHeader('Content-Type', 'application/text');
+            res.setHeader('Content-Type', 'text/plain');
             return res.send(token);
         });
     })(req, res);

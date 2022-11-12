@@ -54,9 +54,9 @@ describe('login', function () {
             testData.request
                 .post('/login')
                 .send({ username: testData.jwtUser.name, password: testData.jwtUser.password })
-                .set('Accept', 'application/json')
+                .set('Accept', 'text/plain')
                 .expect(200)
-                .expect('Content-Type', /application\/text/)
+                .expect('Content-Type', /text\/plain/)
                 .end(function (err, res) {
                     if (err) throw err;
                     res.body.should.deepEqual({});
@@ -205,13 +205,14 @@ describe('login', function () {
         it('should get a new token', function (done) {
             testData.request
                 .put('/login')
-                .set('Accept', 'application/json')
+                .set('Accept', 'text/plain')
                 .set('Authorization', testData.authorizationHeader)
                 .expect(200)
-                .expect('Content-Type', /json/)
+                .expect('Content-Type', /text\/plain/)
                 .end(function (err, res) {
                     if (err) throw err;
-                    res.body.should.equal(authJWT.makeToken.returnValues[0]);
+                    res.body.should.deepEqual({});
+                    res.text.should.equal(authJWT.makeToken.returnValues[0]);
                     done();
                 });
         });
