@@ -14,23 +14,15 @@ exports.getStrategy = function () {
                     if (password === userModel.get('password')) {
                         const newToken = db.model('session').generateToken();
                         const sessionStart = new Date().toISOString();
+                        const saveOpts = {
+                            session_token: newToken,
+                            session_start: sessionStart,
+                            user_id: userModel.get('id')
+                        };
 
-                        db.model('session')
-                            .query('where', 'user_id', '=', userModel.get('id'))
-                            .fetch()
-                            .then(sessionModel => {
-                                return sessionModel;
-                            }, () => {
-                                const saveOpts = {
-                                    session_token: newToken,
-                                    session_start: sessionStart,
-                                    user_id: userModel.get('id')
-                                };
-
-                                return db.model('session')
-                                    .forge()
-                                    .save(saveOpts, { method: 'insert' });
-                            })
+                        return db.model('session')
+                            .forge()
+                            .save(saveOpts, { method: 'insert' })
                             .then(sessionModel => {
                                 return done(null, {
                                     sub: sessionModel.get('session_token'),

@@ -42,6 +42,12 @@ describe('login', function () {
             })
             .then(testUser => {
                 testData.user = testUser;
+                return db.model('session')
+                    .query('where', 'user_id', '=', testData.user.id)
+                    .count();
+            })
+            .then(sessionCount => {
+                testData.sessionCount = sessionCount;
                 done();
             })
             .catch((err) => {
@@ -50,6 +56,16 @@ describe('login', function () {
     });
 
     describe('logging in', function () {
+        const sandbox = sinon.createSandbox();
+
+        beforeEach(function () {
+            sandbox.spy(authJWT, 'makeToken');
+        });
+
+        afterEach(function () {
+            sandbox.restore();
+        });
+
         it('succeeds', function (done) {
             testData.request
                 .post('/login')
@@ -60,8 +76,19 @@ describe('login', function () {
                 .end(function (err, res) {
                     if (err) throw err;
                     res.body.should.deepEqual({});
-                    res.text.should.equal(testData.jwtToken);
-                    done();
+                    res.text.should.equal(authJWT.makeToken.returnValues[0]);
+
+                    db.model('session')
+                        .query('where', 'user_id', '=', testData.user.id)
+                        .count()
+                        .then(sessionCount => {
+                            sessionCount.should.equal(testData.sessionCount + 1);
+                            done();
+                        })
+                        .catch(err => {
+                            // Assertions are caught by the promise. Make sure they get handled.
+                            done(err);
+                        });
                 });
         });
 
