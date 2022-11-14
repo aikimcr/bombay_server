@@ -46,6 +46,9 @@ passport.use(authJWT.getStrategy(app.get('jwt_secret')));
 // configure Express
 app.use(passport.initialize());
 
+authJWT.deleteStaleSessions(); // Remove stale sessions at startup.
+setInterval(authJWT.deleteStaleSessions, 60 * 60 * 1000); // One hour
+
 // Build out a baseReference for use elseqhere
 app.use((req, res, next) => {
     let { hostname, protocol } = req;

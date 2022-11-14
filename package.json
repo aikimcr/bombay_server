@@ -24,6 +24,7 @@
     "express-session": "^1.17.3",
     "http-errors": "^1.6.3",
     "jsonwebtoken": "^8.5.1",
+    "knex": "^2.3.0",
     "morgan": "^1.9.1",
     "passport": ">=0.6.0",
     "passport-jwt": ">=4.0.0",

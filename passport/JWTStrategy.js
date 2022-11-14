@@ -110,6 +110,31 @@ exports.isLoggedIn = async function (req) {
     }
 };
 
+exports.deleteStaleSessions = async function () {
+    const expireTime = new Date();
+
+    expireTime.setHours(expireTime.getHours() - 4);
+    console.log(`Remove sessions started before ${expireTime.toLocaleString()}`);
+
+    db.knex.del()
+        .from('session')
+        .whereIn('id', function () {
+            this.select()
+                .column('id')
+                .from('session')
+                .where('session_start', '<', expireTime.toISOString())
+                .orderBy('session_start', 'asc')
+                .limit(100); // Don't let the process get hung up if there are a lot of stale sessions
+        })
+        .debug(true)
+        .then(result => {
+            console.log('Session Cleanup Result', result);
+        })
+        .catch(err => {
+            console.warn('Session Cleanup Error', err);
+        });
+};
+
 // https://github.com/mikenicholson/passport-jwt
 exports.getStrategy = function (secretOrKey) {
     return new JWTStrategy(

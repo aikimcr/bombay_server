@@ -1,0 +1,4 @@
+#! /bin/sh
+
+pwd
+find . -name '*.js' -and -not -path '*node_modules*' | xargs perl ./git-hooks/check-forbidden.pl
