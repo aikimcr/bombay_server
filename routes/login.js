@@ -55,7 +55,9 @@ exports.doLogout = async (req, res, next) => {
 
         try {
             const sessionModel = await db.model('session').fetchByToken(decoded.sub);
-            await sessionModel.destroy();
+            await db.model('session')
+                .del({ debug: false })
+                .where('id', '=', sessionModel.id);
         } catch (err) {
             return res.sendStatus(200);
         }

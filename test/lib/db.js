@@ -87,21 +87,18 @@ exports.getNextId = getNextId;
 
 function loadTable (tableName, capacity, modelMaker) {
     const table = db.model(tableName);
-    const tablePromises = [];
 
-    while (tablePromises.length < capacity) {
-        const modelDef = modelMaker({ id: tablePromises.length + 1 });
-        tablePromises.push(table.forge().save(modelDef, { method: 'insert' }));
+    const defs = [];
 
-        tablePromises[tablePromises.length - 1].catch((err) => {
-            console.log('--------------> ', err.code, ' <-------------');
-            console.log(tableName);
-            console.log(modelDef);
-            console.log(err);
-        });
+    while (defs.length < capacity) {
+        defs.push(modelMaker({ id: defs.length + 1 }));
     }
 
-    return Promise.all(tablePromises);
+    return table.insert(defs, { debug: false })
+        .catch(err => {
+            console.warn(`error inserting ${tableName}: ${JSON.stringify(defs)}`);
+            throw (err);
+        });
 }
 exports.loadTable = loadTable;
 
@@ -113,38 +110,25 @@ exports.stubPermissions = () => {
     });
 };
 
-function stubModel (tableName, unique = []) {
+function stubModel (tableName) {
     const table = db.model(tableName);
-    const collectionName = `${tableName}Collection`;
 
-    sinon.stub(table, 'forge').callsFake(function () {
-        const model = new this();
+    sinon.spy(table, 'select');
+    sinon.spy(table, 'insert');
+    sinon.spy(table, 'update');
+    sinon.spy(table, 'del');
+    sinon.spy(table, 'count');
+    sinon.spy(table, 'fetchById');
 
-        sinon.spy(model, 'fetch');
-        sinon.spy(model, 'save');
-        sinon.spy(model, 'destroy');
+    if (table.fetchFirstByName) {
+        sinon.spy(table, 'fetchFirstByName');
+    }
+}
 
-        return model;
-    });
-
-    sinon.stub(table, 'collection').callsFake(function () {
-        const collection = new db.Collection();
-        collection.model = table;
-
-        sinon.spy(collection, 'fetch');
-        sinon.spy(collection, 'query');
-
-        exports[collectionName] = collection;
-        return collection;
-    });
-
-    sinon.spy(table, 'query');
-};
-
-exports.stubUser = stubModel.bind(undefined, 'user', ['name', 'full_name', 'password', 'email', 'system_admin', 'session_expires']);
-exports.stubSession = stubModel.bind(undefined, 'session', ['session_token', 'session_start', 'user_id']);
-exports.stubArtist = stubModel.bind(undefined, 'artist', ['name']);
-exports.stubSong = stubModel.bind(undefined, 'song', ['name', 'artist_id']);
+exports.stubUser = stubModel.bind(undefined, 'user');
+exports.stubSession = stubModel.bind(undefined, 'session');
+exports.stubArtist = stubModel.bind(undefined, 'artist');
+exports.stubSong = stubModel.bind(undefined, 'song');
 
 // Create an iterator that circles through the ids as many time as necessary.
 const idIterators = {};
@@ -169,8 +153,8 @@ const tableDefs = {
     user: {
         ids: [],
         buildModel: (args) => {
-            const fakeName = faker.unique(faker.name.findName);
-            const fakeFull = faker.unique(faker.name.findName);
+            const fakeName = faker.helpers.unique(faker.name.fullName);
+            const fakeFull = faker.helpers.unique(faker.name.fullName);
 
             return {
                 name: fakeName,
@@ -202,7 +186,7 @@ const tableDefs = {
     artist: {
         ids: [],
         buildModel: (args) => {
-            const fakeName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
+            const fakeName = faker.helpers.unique(faker.name.fullName);
             return { name: fakeName, ...args };
         }
     },
@@ -211,7 +195,7 @@ const tableDefs = {
         ids: [],
         buildModel: (args) => {
             const nextArtistId = idIterator('artist');
-            const fakeName = faker.unique(faker.name.findName); // Deprecated and replaced by 'fullName' in a later faker release.
+            const fakeName = faker.helpers.unique(faker.name.fullName);
             const fakeId = nextArtistId();
 
             return {
@@ -233,32 +217,22 @@ tableDefs.loadModels = async (args = { artist: true }) => {
 
     if (args.artist) {
         models.artist = await loadTable('artist', 25, tableDefs.artist.buildModel);
-        tableDefs.artist.ids = models.artist.map(artist => {
-            return artist.get('id');
-        });
-        delete idIterators.artist;
-        exports.stubArtist();
+        tableDefs.artist.ids = models.artist.map(artist => artist.id);
     }
+    exports.stubArtist();
 
     if (args.song && tableDefs.artist.ids.length > 0) {
         models.song = await loadTable('song', 25, tableDefs.song.buildModel);
-        tableDefs.song.ids = models.song.map(song => {
-            return song.get('id');
-        });
-        delete idIterators.song;
-        exports.stubSong();
+        tableDefs.song.ids = models.song.map(song => song.id);
     }
+    exports.stubSong();
 
     models.user = await loadTable('user', 5, tableDefs.user.buildModel);
-    tableDefs.user.ids = models.user.map(user => {
-        return user.get('id');
-    });
+    tableDefs.user.ids = models.user.map(user => user.id);
     exports.stubUser();
 
     models.session = await loadTable('session', 5, tableDefs.session.buildModel);
-    tableDefs.session.ids = models.session.map(session => {
-        return session.get('id');
-    });
+    tableDefs.session.ids = models.session.map(session => session.id);
     exports.stubSession();
 
     return models;
@@ -275,8 +249,8 @@ exports.makeJWT = function (payload) {
 
 exports.getTestData = async (tableName) => {
     const testData = {
-        newName: faker.unique(faker.name.findName), // Deprecated and replaced by 'fullName' in a later faker release.
-        findName: faker.unique(faker.name.findName) // Deprecated and replaced by 'fullName' in a later faker release.
+        newName: faker.helpers.unique(faker.name.fullName), // Deprecated and replaced by 'fullName' in a later faker release.
+        findName: faker.helpers.unique(faker.name.fullName) // Deprecated and replaced by 'fullName' in a later faker release.
     };
 
     if (tableName) {

@@ -13,7 +13,7 @@ exports.verifySession = async function (jwtPayload) {
 
     try {
         sessionModel = await db.model('session').fetchByToken(jwtPayload.sub);
-        userId = sessionModel.get('user_id');
+        userId = sessionModel.user_id;
     } catch (err) {
         errorObject = createError(401, 'Session not found');
     }
@@ -25,7 +25,7 @@ exports.verifySession = async function (jwtPayload) {
     try {
         const userModel = await db.model('user').fetchById(userId);
 
-        const expireSeconds = userModel.get('session_expires') * 60;
+        const expireSeconds = userModel.session_expires * 60;
         const nowSeconds = parseInt(Date.now() / 1000); // convert from milliseconds
 
         if (nowSeconds - expireSeconds > jwtPayload.iat) {
@@ -63,11 +63,12 @@ exports.refreshToken = async function (req) {
     const newToken = db.model('session').generateToken();
     const sessionStart = new Date().toISOString();
 
-    sessionModel
-        .save({
+    await db.model('session')
+        .update({
             session_token: newToken,
             session_start: sessionStart
-        }, { patch: true })
+        }, { debug: false })
+        .where('id', '=', sessionModel.id)
         .catch(err => {
             errorObject = createError(500, `Unable to update session ${err.message}`);
         });

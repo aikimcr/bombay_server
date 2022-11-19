@@ -5,7 +5,6 @@ const router = express.Router();
 const db = require('../lib/db')();
 const dbDebug = false;
 
-const Artist = db.model('artist');
 const tableColumns = ['name'];
 
 const routeUtils = require('../lib/routeUtils');
@@ -46,16 +45,14 @@ router.get('/', (req, res, next) => {
     const offset = req.query.offset || 0;
     const limit = req.query.limit || 10;
 
-    Artist
-        .collection()
-        .query('orderBy', 'name')
-        .query('offset', offset.toString())
-        .query('limit', limit.toString())
-        .fetch({ debug: dbDebug })
+    db.model('artist')
+        .select(undefined, { debug: dbDebug })
+        .orderBy('name')
+        .offset(offset)
+        .limit(limit)
         .then((collection) => {
             if (collection.length > 0) {
-                const data = collection.toJSON();
-                return normalizeList(req, data)
+                return normalizeList(req, collection)
                     .catch((err) => {
                         next(err);
                     });
@@ -76,25 +73,27 @@ router.get('/', (req, res, next) => {
             } else {
                 next(createError(404));
             }
+        })
+        .catch(err => {
+            next(err);
         });
 });
 
 /* GET an artist by name */
 router.get('/:nameorid', (req, res, next) => {
-    Artist
-        .query('where', 'name', '=', req.params.nameorid)
-        .fetch({ debug: dbDebug })
+    db.model('artist')
+        .fetchFirstByName(req.params.nameorid, { debug: dbDebug })
         .then(model => {
-            return normalizeModel(req, model.toJSON());
+            return normalizeModel(req, model);
         })
         .then((model) => {
             res.send(model);
         })
         .catch(() => {
             if (req.params.nameorid.match(/^\d+$/)) {
-                Artist.fetchById(req.params.nameorid)
+                db.model('artist').fetchById(req.params.nameorid, { debug: dbDebug })
                     .then(model => {
-                        return normalizeModel(req, model.toJSON());
+                        return normalizeModel(req, model);
                     })
                     .then((model) => {
                         res.send(model);
@@ -114,10 +113,10 @@ router.post('/', (req, res, next) => {
     const saveOpts = { ...defaults, ...req.body };
     delete saveOpts.id;
 
-    Artist.forge()
-        .save(saveOpts, { method: 'insert', debug: dbDebug })
+    db.model('artist')
+        .insert(saveOpts, { debug: dbDebug })
         .then(newArtist => {
-            return normalizeModel(req, newArtist.toJSON());
+            return normalizeModel(req, newArtist);
         })
         .then(newArtist => {
             res.send(newArtist);
@@ -129,14 +128,15 @@ router.post('/', (req, res, next) => {
 
 /* update an artist */
 router.put('/:id', (req, res, next) => {
-    Artist.fetchById(req.params.id)
+    db.model('artist')
+        .update({ name: req.body.name }, { debug: dbDebug })
+        .where('id', '=', req.params.id)
         .then(model => {
-            return model.save({ name: req.body.name }, { debug: dbDebug, patch: true });
-        }, () => {
-            return Promise.reject(createError(404));
-        })
-        .then(model => {
-            return normalizeModel(req, model.toJSON());
+            if (model.length === 0) {
+                return Promise.reject(createError(404, 'Not Found'));
+            }
+
+            return normalizeModel(req, model[0]);
         })
         .then(model => {
             res.send(model);
@@ -148,25 +148,26 @@ router.put('/:id', (req, res, next) => {
 
 /* delete an artist */
 router.delete('/:id', (req, res, next) => {
-    Artist.fetchById(req.params.id)
+    db.model('artist').fetchById(req.params.id)
         .then(model => {
-            const Song = db.model('song');
+            if (!model) return Promise.reject(createError(404, 'Not Found'));
 
-            return Song
-                .collection()
-                .query('where', 'artist_id', '=', model.get('id'))
-                .count('id')
+            return db.model('song')
+                .count({ debug: dbDebug })
+                .where('artist_id', '=', model.id)
                 .then((songCount) => {
-                    if (songCount === 0) {
-                        return model.destroy({ debug: dbDebug });
-                    } else if (songCount === 1) {
+                    if (songCount[0].rows === 0) {
+                        return db.model('artist')
+                            .del({ debug: dbDebug })
+                            .where('id', '=', model.id);
+                    } else if (songCount[0].rows === 1) {
                         return Promise.reject(createError(400, 'Attempt to delete artist with one reference'));
                     } else {
-                        return Promise.reject(createError(400, `Attempt to delete artist with ${songCount} references`));
+                        return Promise.reject(createError(400, `Attempt to delete artist with ${songCount[0].rows} references`));
                     }
                 });
-        }, () => {
-            return Promise.reject(createError(404));
+        }, (err) => {
+            return Promise.reject(err);
         })
         .then(model => {
             res.sendStatus(200);
