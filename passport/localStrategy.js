@@ -11,25 +11,26 @@ exports.getStrategy = function () {
 
             db.model('user').fetchFirstByName(username)
                 .then((userModel) => {
-                    if (password === userModel.get('password')) {
+                    if (!userModel) return Promise.reject(createError(401, 'No such user'));
+
+                    if (password === userModel.password) {
                         const newToken = db.model('session').generateToken();
                         const sessionStart = new Date().toISOString();
                         const saveOpts = {
                             session_token: newToken,
                             session_start: sessionStart,
-                            user_id: userModel.get('id')
+                            user_id: userModel.id
                         };
 
                         return db.model('session')
-                            .forge()
-                            .save(saveOpts, { method: 'insert' })
+                            .insert(saveOpts, { debug: false })
                             .then(sessionModel => {
                                 return done(null, {
-                                    sub: sessionModel.get('session_token'),
+                                    sub: sessionModel.session_token,
                                     user: {
-                                        id: userModel.get('id'),
-                                        name: userModel.get('name'),
-                                        admin: !!userModel.get('system_admin')
+                                        id: userModel.id,
+                                        name: userModel.name,
+                                        admin: !!userModel.system_admin
                                     }
                                 });
                             })

@@ -5,7 +5,6 @@ const router = express.Router();
 const db = require('../lib/db')();
 const dbDebug = false;
 
-const Song = db.model('song');
 const tableColumns = ['name', 'artist_id', 'key_signature', 'tempo', 'lyrics'];
 
 const routeUtils = require('../lib/routeUtils');
@@ -16,7 +15,7 @@ async function normalizeModel (req, model) {
     const url = routeUtils.getModelUrl(req, model);
     const artistModel = await Artist.fetchById(model.artist_id);
 
-    const artist = artistModel.toJSON();
+    const artist = artistModel;
     artist.url = routeUtils.getModelUrl(req, artist, { baseUrl: 'artist' });
 
     return {
@@ -69,16 +68,14 @@ router.get('/', (req, res, next) => {
     const offset = req.query.offset || 0;
     const limit = req.query.limit || 10;
 
-    Song
-        .collection()
-        .query('orderBy', 'name')
-        .query('offset', offset.toString())
-        .query('limit', limit.toString())
-        .fetch({ debug: dbDebug })
+    db.model('song')
+        .select(undefined, { debug: dbDebug })
+        .orderBy('name')
+        .offset(offset)
+        .limit(limit)
         .then((collection) => {
             if (collection.length > 0) {
-                const data = collection.toJSON();
-                return normalizeList(req, data)
+                return normalizeList(req, collection)
                     .catch((err) => {
                         next(err);
                     });
@@ -104,20 +101,21 @@ router.get('/', (req, res, next) => {
 
 /* GET an song by name or id */
 router.get('/:nameorid', (req, res, next) => {
-    Song
-        .query('where', 'name', '=', req.params.nameorid)
-        .fetch({ debug: dbDebug })
+    db.model('song')
+        .fetchFirstByName(req.params.nameorid, { debug: dbDebug })
         .then(model => {
-            return normalizeModel(req, model.toJSON());
+            if (!model) return Promise.reject(createError(404));
+            return normalizeModel(req, model);
         })
         .then(model => {
             res.send(model);
         })
         .catch(() => {
             if (req.params.nameorid.match(/^\d+$/)) {
-                Song.fetchById(req.params.nameorid)
+                db.model('song').fetchById(req.params.nameorid, { debug: dbDebug })
                     .then(model => {
-                        return normalizeModel(req, model.toJSON());
+                        if (!model) return Promise.reject(createError(404));
+                        return normalizeModel(req, model);
                     })
                     .then(model => {
                         res.send(model);
@@ -141,10 +139,10 @@ router.post('/', (req, res, next) => {
     const saveOpts = { ...defaults, ...req.body };
     delete saveOpts.id;
 
-    Song.forge()
-        .save(saveOpts, { debug: dbDebug })
+    db.model('song')
+        .insert(saveOpts, { debug: dbDebug })
         .then(newSong => {
-            return normalizeModel(req, newSong.toJSON());
+            return normalizeModel(req, newSong);
         })
         .then(newSong => {
             res.send(newSong);
@@ -164,14 +162,15 @@ router.put('/:id', (req, res, next) => {
         }
     });
 
-    Song.fetchById(req.params.id)
+    db.model('song')
+        .update(saveOpts, { debug: dbDebug })
+        .where('id', '=', req.params.id)
         .then(model => {
-            return model.save(saveOpts, { patch: true, debug: dbDebug });
-        }, () => {
-            return Promise.reject(createError(404));
-        })
-        .then(model => {
-            return normalizeModel(req, model.toJSON());
+            if (model.length === 0) {
+                return Promise.reject(createError(404, 'Not Found'));
+            }
+
+            return normalizeModel(req, model[0]);
         })
         .then(model => {
             res.send(model);
@@ -183,9 +182,11 @@ router.put('/:id', (req, res, next) => {
 
 /* delete an song */
 router.delete('/:id', (req, res, next) => {
-    Song.fetchById(req.params.id)
+    db.model('song').fetchById(req.params.id)
         .then(model => {
-            return model.destroy();
+            return db.model('song')
+                .del({ debug: dbDebug })
+                .where('id', '=', model.id);
         }, () => {
             return Promise.reject(createError(404));
         })

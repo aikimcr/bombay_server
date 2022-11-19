@@ -21,7 +21,6 @@ after(() => {
 
 describe('artist', function () {
     const tableName = 'artist';
-    const Artist = db.model(tableName);
 
     let testData = null;
 
@@ -101,7 +100,8 @@ describe('artist', function () {
                     .expect('Content-Type', /json/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        testDb.artistCollection.query.args.should.deepEqual(queryExpect);
+                        const actualSQL = db.model('artist').select.returnValues[0].toString();
+                        actualSQL.should.equal('select * from `artist` order by `name` asc limit 10');
                         bodyExpect(queryExpect)
                             .then(function (expectation) {
                                 res.body.should.deepEqual(expectation);
@@ -129,7 +129,8 @@ describe('artist', function () {
                     .expect('Content-Type', /json/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        testDb.artistCollection.query.args.should.deepEqual(queryExpect);
+                        const actualSQL = db.model('artist').select.returnValues[0].toString();
+                        actualSQL.should.equal('select * from `artist` order by `name` asc limit 10 offset 10');
                         bodyExpect(queryExpect)
                             .then(function (expectation) {
                                 res.body.should.deepEqual(expectation);
@@ -157,7 +158,8 @@ describe('artist', function () {
                     .expect('Content-Type', /json/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        testDb.artistCollection.query.args.should.deepEqual(queryExpect);
+                        const actualSQL = db.model('artist').select.returnValues[0].toString();
+                        actualSQL.should.equal('select * from `artist` order by `name` asc limit 10 offset 20');
                         bodyExpect(queryExpect)
                             .then(function (expectation) {
                                 res.body.should.deepEqual(expectation);
@@ -170,13 +172,6 @@ describe('artist', function () {
             });
 
             it('should return a 404', function (done) {
-                const queryExpect = [
-                    ['orderBy', 'name'],
-                    ['offset', '30'],
-                    ['limit', '10'],
-                    []
-                ];
-
                 testData.request
                     .get('/artist?offset=30&limit=10')
                     .set('Accept', 'application/json')
@@ -185,7 +180,8 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        testDb.artistCollection.query.args.should.deepEqual(queryExpect);
+                        const actualSQL = db.model('artist').select.returnValues[0].toString();
+                        actualSQL.should.equal('select * from `artist` order by `name` asc limit 10 offset 30');
                         res.body.should.deepEqual({});
                         res.text.should.equal('Not Found');
                         done();
@@ -203,9 +199,11 @@ describe('artist', function () {
                     .expect('Content-Type', /json/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([
-                            ['where', 'name', '=', testData.model.name]
-                        ]);
+
+                        db.model('artist').fetchFirstByName.calledWith(testData.model.name).should.be.true();
+
+                        db.model('artist').fetchById.notCalled.should.be.true();
+
                         res.body.should.deepEqual({
                             ...testData.model,
                             url: `http://127.0.0.1/artist/${testData.model.id}`
@@ -223,10 +221,13 @@ describe('artist', function () {
                     .expect('Content-Type', /json/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([
-                            ['where', 'name', '=', testData.model.id.toString()],
-                            ['where', 'id', '=', testData.model.id.toString()]
-                        ]);
+
+                        // First it will try to get it by name
+                        db.model('artist').fetchFirstByName.args[0].should.deepEqual([testData.model.id.toString(), { debug: false }]);
+
+                        // Then it will fetch it by id
+                        db.model('artist').fetchById.calledWith(testData.model.id.toString()).should.be.true();
+
                         res.body.should.deepEqual({
                             ...testData.model,
                             url: `http://127.0.0.1/artist/${testData.model.id}`
@@ -244,9 +245,13 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([
-                            ['where', 'name', '=', testData.findName]
-                        ]);
+
+                        // First it will try to get it by name
+                        db.model('artist').fetchFirstByName.args[0].should.deepEqual([testData.findName.toString(), { debug: false }]);
+
+                        // But it will not try to fetch by id because the name doesn't look like an id.
+                        db.model('artist').fetchById.notCalled.should.be.true();
+
                         res.body.should.deepEqual({});
                         res.text.should.equal('Not Found');
                         done();
@@ -267,7 +272,12 @@ describe('artist', function () {
                     .expect('Content-Type', /json/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([]);
+
+                        db.model('artist').insert.args[0].should.deepEqual([
+                            { name: testData.newName },
+                            { debug: false } // This should be the normal state.
+                        ]);
+
                         res.body.should.deepEqual({
                             id: testData.newId,
                             name: testData.newName,
@@ -287,7 +297,10 @@ describe('artist', function () {
                     .expect('Content-Type', /json/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([]);
+                        db.model('artist').insert.args[0].should.deepEqual([
+                            { name: testData.newName },
+                            { debug: false } // This should be the normal state.
+                        ]);
                         res.body.should.deepEqual({
                             id: testData.newId,
                             name: testData.newName,
@@ -307,7 +320,7 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([]);
+                        db.model('artist').insert.notCalled.should.be.true();
                         res.body.should.deepEqual({});
                         res.text.should.equal('Name must be specified');
                         done();
@@ -324,7 +337,12 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([]);
+
+                        db.model('artist').insert.args[0].should.deepEqual([
+                            { name: testData.duplicate.name },
+                            { debug: false } // This should be the normal state.
+                        ]);
+
                         res.body.should.deepEqual({});
                         res.text.should.match(/^Invalid request SQL UNIQUE CONSTRAINT \(\{.*\}\)$/);
                         done();
@@ -341,7 +359,7 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([]);
+                        db.model('artist').insert.notCalled.should.be.true();
                         res.body.should.deepEqual({});
                         res.text.should.equal('Unexpected data found: \'{"gender":"male","age":"156"}\'');
                         done();
@@ -362,9 +380,14 @@ describe('artist', function () {
                     .expect('Content-Type', /json/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([
-                            ['where', 'id', '=', testData.model.id.toString()]
+
+                        db.model('artist').update.args[0].should.deepEqual([
+                            { name: testData.newName },
+                            { debug: false } // This should be the normal state.
                         ]);
+
+                        const actualSQL = db.model('artist').update.returnValues[0].toString();
+                        actualSQL.should.equal(`update \`artist\` set \`name\` = '${testData.newName}' where \`id\` = '${testData.model.id.toString()}' returning \`id\`, \`name\``);
                         res.body.should.deepEqual({
                             id: testData.model.id,
                             name: testData.newName,
@@ -384,9 +407,14 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([
-                            ['where', 'id', '=', testData.model.id.toString()]
+
+                        db.model('artist').update.args[0].should.deepEqual([
+                            { name: testData.duplicate.name },
+                            { debug: false } // This should be the normal state.
                         ]);
+
+                        const actualSQL = db.model('artist').update.returnValues[0].toString();
+                        actualSQL.should.equal(`update \`artist\` set \`name\` = '${testData.duplicate.name}' where \`id\` = '${testData.model.id.toString()}' returning \`id\`, \`name\``);
                         res.body.should.deepEqual({});
                         res.text.should.match(/^Invalid request SQL UNIQUE CONSTRAINT \(\{.*\}\)$/);
                         done();
@@ -403,9 +431,14 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([
-                            ['where', 'id', '=', testData.findId.toString()]
+
+                        db.model('artist').update.args[0].should.deepEqual([
+                            { name: testData.newName },
+                            { debug: false } // This should be the normal state.
                         ]);
+
+                        const actualSQL = db.model('artist').update.returnValues[0].toString();
+                        actualSQL.should.equal(`update \`artist\` set \`name\` = '${testData.newName}' where \`id\` = '${testData.findId.toString()}' returning \`id\`, \`name\``);
                         res.body.should.deepEqual({});
                         res.text.should.equal('Not Found');
                         done();
@@ -425,9 +458,18 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/plain/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([
-                            ['where', 'id', '=', testData.model.id.toString()]
-                        ]);
+
+                        // First it gets the model.
+                        db.model('artist').fetchById.calledWith(testData.model.id.toString()).should.be.true();
+
+                        // Next if fetchs the songs associated with the artist.
+                        const songSQL = db.model('song').count.returnValues[0].toString();
+                        songSQL.should.equal(`select count(\`id\`) as \`rows\` from \`song\` where \`artist_id\` = ${testData.model.id}`);
+
+                        // Then when if finds no songs, it deletes the artist.
+                        const artistSQL = db.model('artist').del.returnValues[0].toString();
+                        artistSQL.should.equal(`delete from \`artist\` where \`id\` = ${testData.model.id}`);
+
                         res.body.should.deepEqual({});
                         res.text.should.equal('OK');
                         done();
@@ -437,7 +479,7 @@ describe('artist', function () {
             it('should reject if id is referenced by a song', function (done) {
                 const Song = db.model('song');
                 const songModel = testDb.tableDefs.song.buildModel({ artist_id: testData.model.id });
-                Song.forge().save(songModel, { method: 'insert' })
+                Song.insert(songModel)
                     .then((newSong) => {
                         testData.request
                             .delete(`/artist/${testData.model.id}`)
@@ -447,9 +489,17 @@ describe('artist', function () {
                             .expect('Content-Type', /text\/html/)
                             .end(function (err, res) {
                                 if (err) throw err;
-                                Artist.query.args.should.deepEqual([
-                                    ['where', 'id', '=', testData.model.id.toString()]
-                                ]);
+
+                                // First it gets the model.
+                                db.model('artist').fetchById.calledWith(testData.model.id.toString()).should.be.true();
+
+                                // Next if fetchs the songs associated with the artist.
+                                const songSQL = db.model('song').count.returnValues[0].toString();
+                                songSQL.should.equal(`select count(\`id\`) as \`rows\` from \`song\` where \`artist_id\` = ${testData.model.id}`);
+
+                                // If it finds songs, it emits an error and does not attempt to delete.
+                                db.model('artist').del.notCalled.should.be.true();
+
                                 res.body.should.deepEqual({});
                                 res.text.should.equal('Attempt to delete artist with one reference');
                                 done();
@@ -462,9 +512,9 @@ describe('artist', function () {
                 const songModel1 = testDb.tableDefs.song.buildModel({ artist_id: testData.model.id });
                 const songModel2 = testDb.tableDefs.song.buildModel({ artist_id: testData.model.id });
 
-                Song.forge().save(songModel1, { method: 'insert' })
+                Song.insert(songModel1)
                     .then((newSong) => {
-                        return Song.forge().save(songModel2, { method: 'insert' });
+                        return Song.insert(songModel2);
                     })
                     .then((newSong2) => {
                         testData.request
@@ -474,9 +524,17 @@ describe('artist', function () {
                             .expect(400).expect('Content-Type', /text\/html/)
                             .end(function (err, res) {
                                 if (err) throw err;
-                                Artist.query.args.should.deepEqual([
-                                    ['where', 'id', '=', testData.model.id.toString()]
-                                ]);
+
+                                // First it gets the model.
+                                db.model('artist').fetchById.calledWith(testData.model.id.toString()).should.be.true();
+
+                                // Next if fetchs the songs associated with the artist.
+                                const songSQL = db.model('song').count.returnValues[0].toString();
+                                songSQL.should.equal(`select count(\`id\`) as \`rows\` from \`song\` where \`artist_id\` = ${testData.model.id}`);
+
+                                // If it finds songs, it emits an error and does not attempt to delete.
+                                db.model('artist').del.notCalled.should.be.true();
+
                                 res.body.should.deepEqual({});
                                 res.text.should.equal('Attempt to delete artist with 2 references');
                                 done();
@@ -493,9 +551,14 @@ describe('artist', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Artist.query.args.should.deepEqual([
-                            ['where', 'id', '=', testData.findId.toString()]
-                        ]);
+
+                        // First it tries to get the model.
+                        db.model('artist').fetchById.calledWith(testData.findId.toString()).should.be.true();
+
+                        // If it fails to find a model, it emits an error and takes no further action.
+                        db.model('song').count.notCalled.should.be.true();
+                        db.model('artist').del.notCalled.should.be.true();
+
                         res.body.should.deepEqual({});
                         res.text.should.equal('Not Found');
                         done();

@@ -43,8 +43,8 @@ describe('login', function () {
             .then(testUser => {
                 testData.user = testUser;
                 return db.model('session')
-                    .query('where', 'user_id', '=', testData.user.id)
-                    .count();
+                    .count()
+                    .where('user_id', '=', testData.user.id);
             })
             .then(sessionCount => {
                 testData.sessionCount = sessionCount;
@@ -79,10 +79,10 @@ describe('login', function () {
                     res.text.should.equal(authJWT.makeToken.returnValues[0]);
 
                     db.model('session')
-                        .query('where', 'user_id', '=', testData.user.id)
                         .count()
+                        .where('user_id', '=', testData.user.id)
                         .then(sessionCount => {
-                            sessionCount.should.equal(testData.sessionCount + 1);
+                            sessionCount[0].rows.should.equal(testData.sessionCount[0].rows + 1);
                             done();
                         })
                         .catch(err => {
@@ -260,7 +260,11 @@ describe('login', function () {
 
                     db.model('session').fetchByToken(testData.jwtSession.session_token)
                         .then(sessionModel => {
-                            done(new Error('Session should not exist'));
+                            if (sessionModel) {
+                                done(new Error('Session should not exist'));
+                            } else {
+                                done();
+                            }
                         })
                         .catch(() => {
                             done();
