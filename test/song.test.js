@@ -16,15 +16,15 @@ const db = require('../lib/db')({
 });
 const testDb = require('./lib/db');
 
-after(() => {
+after((done) => {
     db.knex.destroy((err) => {
-        console.log(err);
+        if (err) done(err);
+        done();
     });
 });
 
 describe('song', function () {
     const tableName = 'song';
-    const Song = db.model(tableName);
 
     let testData = null;
 
@@ -649,7 +649,7 @@ describe('song', function () {
         });
     });
 
-    describe.skip('delete', function () {
+    describe('delete', function () {
         describe('model', function () {
             it('should delete the model from the datatbase', function (done) {
                 testData.request
@@ -660,9 +660,14 @@ describe('song', function () {
                     .expect('Content-Type', /text\/plain/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Song.query.args.should.deepEqual([
-                            ['where', 'id', '=', testData.model.id]
-                        ]);
+
+                        // First it gets the model.
+                        db.model('song').fetchById.calledWith(testData.model.id.toString()).should.be.true();
+
+                        // Then it deletes the song.
+                        const songSQL = db.model('song').del.returnValues[0].toString();
+                        songSQL.should.equal(`delete from \`song\` where \`id\` = ${testData.model.id}`);
+
                         res.body.should.deepEqual({});
                         res.text.should.equal('OK');
                         done();
@@ -678,9 +683,13 @@ describe('song', function () {
                     .expect('Content-Type', /text\/html/)
                     .end(function (err, res) {
                         if (err) throw err;
-                        Song.query.args.should.deepEqual([
-                            ['where', 'id', '=', testData.findId]
-                        ]);
+
+                        // First it tries to get the model.
+                        db.model('song').fetchById.calledWith(testData.findId.toString()).should.be.true();
+
+                        // If it fails to find a model, it emits an error and takes no further action.
+                        db.model('song').del.notCalled.should.be.true();
+
                         res.body.should.deepEqual({});
                         res.text.should.equal('Not Found');
                         done();
