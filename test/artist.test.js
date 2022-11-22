@@ -13,9 +13,10 @@ const db = require('../lib/db')({
 });
 const testDb = require('./lib/db');
 
-after(() => {
+after((done) => {
     db.knex.destroy((err) => {
-        console.log(err);
+        if (err) done(err);
+        done();
     });
 });
 

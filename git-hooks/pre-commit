@@ -72,7 +72,7 @@ EOF
 	exit 1
 fi
 
-npm run eslint
+npm run eslint:fix
 result=$?
 
 if [ $result -ne 0 ]

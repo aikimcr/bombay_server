@@ -47,7 +47,8 @@ passport.use(authJWT.getStrategy(app.get('jwt_secret')));
 app.use(passport.initialize());
 
 authJWT.deleteStaleSessions(); // Remove stale sessions at startup.
-setInterval(authJWT.deleteStaleSessions, 60 * 60 * 1000); // One hour
+// Doing it this way causes tests to hang after completion.  This is not acceptable.
+// setInterval(authJWT.deleteStaleSessions, 60 * 60 * 1000); // One hour
 
 // Build out a baseReference for use elseqhere
 app.use((req, res, next) => {

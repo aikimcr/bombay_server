@@ -184,6 +184,8 @@ router.put('/:id', (req, res, next) => {
 router.delete('/:id', (req, res, next) => {
     db.model('song').fetchById(req.params.id)
         .then(model => {
+            if (!model) return Promise.reject(createError(404, 'Not Found'));
+
             return db.model('song')
                 .del({ debug: dbDebug })
                 .where('id', '=', model.id);

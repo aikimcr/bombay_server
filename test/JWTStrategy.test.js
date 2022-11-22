@@ -18,9 +18,10 @@ const jwt = require('jsonwebtoken');
 
 const authJWT = require('../passport/JWTStrategy');
 
-after(() => {
+after((done) => {
     db.knex.destroy((err) => {
-        console.log(err);
+        if (err) done(err);
+        done();
     });
 });
 
